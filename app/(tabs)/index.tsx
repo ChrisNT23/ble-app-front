@@ -1,75 +1,123 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { Image, TouchableOpacity, StyleSheet, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 
 export default function HomeScreen() {
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
+    <ThemedView style={styles.container}>
+      {/* Header with Connection Status */}
+      <ThemedView style={styles.header}>
+        <ThemedText type="title">Aqui va el nombre de la app</ThemedText>
+        <ThemedView style={styles.connectionStatus}>
+          <ThemedView style={styles.statusContainer}>
+            <MaterialIcons name="bluetooth-disabled" size={20} color="#FF0000" />
+            <ThemedText style={styles.statusText}>Disconnected</ThemedText>
+          </ThemedView>
+          <TouchableOpacity style={styles.reconnectButton}>
+            <ThemedText style={styles.reconnectText}>Reconnect</ThemedText>
+          </TouchableOpacity>
+        </ThemedView>
       </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
+
+      {/* Main Content */}
+      <ThemedView style={styles.mainContent}>
+        {/* Test Notification Button */}
+        <TouchableOpacity style={styles.testButton}>
+          <MaterialIcons name="notifications" size={40} color="#FFFFFF" />
+          <ThemedText style={styles.testButtonText}>Test Notification</ThemedText>
+        </TouchableOpacity>
+
+        {/* Instruction Text */}
+        <ThemedText style={styles.instructionText}>
+          Press to test the emergency notification system
         </ThemedText>
+
+        {/* BLE Connection Message */}
+        <ThemedView style={styles.bleMessage}>
+          <ThemedText style={styles.bleText}>
+            Connect to a BLE device to enable emergency alerts
+          </ThemedText>
+        </ThemedView>
       </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  header: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  connectionStatus: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3F3',
+    padding: 8,
+    borderRadius: 8,
     gap: 8,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  statusText: {
+    color: '#FF0000',
+    fontSize: 16,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  reconnectButton: {
+    backgroundColor: '#E6F0FA',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  reconnectText: {
+    color: '#000',
+    fontSize: 16,
+  },
+  mainContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  testButton: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: '#D3D3D3',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  testButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 8,
+  },
+  instructionText: {
+    fontSize: 16,
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  bleMessage: {
+    backgroundColor: '#E6F0FA',
+    padding: 16,
+    borderRadius: 8,
+  },
+  bleText: {
+    fontSize: 14,
+    color: '#333',
+    textAlign: 'center',
   },
 });
