@@ -1,13 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { HapticTab } from '@/components/HapticTab';
-import { IconSymbol } from '@/components/ui/IconSymbol';
+import TermsModal from '@/components/TermsModal';
 import TabBarBackground from '@/components/ui/TabBarBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Tabs } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
-import TermsModal from '@/components/TermsModal';
+import Icon from 'react-native-vector-icons/FontAwesome';
 
 // Example of aliasing imports if there are conflicts
 // import { AndroidCheckBox as CheckBox1 } from 'library1';
@@ -62,21 +62,21 @@ export default function TabLayout() {
           name="index"
           options={{
             title: 'Inicio',
-            tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+            tabBarIcon: ({ color }) => <Icon name="home" size={25} color={color} />,
           }}
         />
         <Tabs.Screen
           name="connect"
           options={{
             title: 'Conexión',
-            tabBarIcon: ({ color }) => <IconSymbol name="house.fill" size={28} color={color} />,
+            tabBarIcon: ({ color }) => <Icon name="wifi" size={20} color={color} />,
           }}
         />
         <Tabs.Screen
           name="settings"
           options={{
             title: 'Configuración',
-            tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+            tabBarIcon: ({ color }) => <Icon name="cog" size={20} color={color} />,
           }}
         />
       </Tabs>

@@ -4,8 +4,10 @@ import { Alert, Linking, PermissionsAndroid, Platform, StyleSheet, TouchableOpac
 import { BleManager, Device } from 'react-native-ble-plx';
 import Geolocation from 'react-native-geolocation-service';
 import SMS from 'react-native-sms';
+import Icon from 'react-native-vector-icons/FontAwesome';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
+
 
 // Define the props interface for BleDeviceManager
 interface BleDeviceManagerProps {
@@ -519,7 +521,8 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
               ))}
               {!isScanning && (
                 <TouchableOpacity onPress={startScan} style={styles.refreshButton}>
-                  <ThemedText style={styles.refreshText}>Recargar</ThemedText>
+                   <ThemedText style={styles.refreshText}>Recargar</ThemedText>
+                   <Icon name="refresh" size={20} color="#fff" />
                 </TouchableOpacity>
               )}
             </>
@@ -607,8 +610,10 @@ const styles = StyleSheet.create({
   },
   refreshButton: {
     backgroundColor: '#34C759',
+     flexDirection: 'row',
     paddingVertical: 10,
     paddingHorizontal: 20,
+    alignItems: 'center',
     borderRadius: 6,
     alignSelf: 'center',
     marginTop: 12,
@@ -617,6 +622,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+    marginRight: 10, 
   },
 });
 

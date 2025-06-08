@@ -138,7 +138,7 @@ export default function SettingsScreen() {
       {/* Form Section */}
       <ThemedView style={styles.form}>
         {/* Your Name */}
-        <ThemedText style={styles.label}>Ingrese su nombre</ThemedText>
+        <ThemedText style={styles.label}>Ingrese su nombre:</ThemedText>
         <TextInput
           style={styles.input}
           value={name}
@@ -149,7 +149,7 @@ export default function SettingsScreen() {
         />
 
         {/* Emergency Contact */}
-        <ThemedText style={styles.label}>Ingrese el contacto de emergencia</ThemedText>
+        <ThemedText style={styles.label}>Ingrese su contacto de emergencia:</ThemedText>
         <TextInput
           style={styles.input}
           value={emergencyContact}
@@ -161,7 +161,7 @@ export default function SettingsScreen() {
         />
 
         {/* Emergency Message */}
-        <ThemedText style={styles.label}>Mensaje de emergencia</ThemedText>
+        <ThemedText style={styles.label}>Mensaje de emergencia:</ThemedText>
         <TextInput
           style={[styles.input, styles.messageInput]}
           value={emergencyMessage}
