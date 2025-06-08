@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, PermissionsAndroid, Platform, StyleSheet, TouchableOpacity } from 'react-native';
+import { Alert, Linking, PermissionsAndroid, Platform, StyleSheet, TouchableOpacity } from 'react-native';
 import { BleManager, Device } from 'react-native-ble-plx';
 import Geolocation from 'react-native-geolocation-service';
 import SMS from 'react-native-sms';
@@ -50,7 +50,7 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
   const subscriptionRef = useRef<any>(null); // Para rastrear la suscripción
 
   // Variable de simulación: cuando es true, se simula el envío con un Alert; cuando es false, se envía un SMS real
-  const isSimulation = false; // Cambia a false antes de construir la APK para enviar SMS reales
+  const isSimulation = true; // Cambia a false antes de construir la APK para enviar SMS reales
 
   // Request BLE, SMS, and Location permissions on Android
   const requestPermissions = async (): Promise<boolean> => {
@@ -91,7 +91,6 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
 
       return hasBlePermissions;
     } catch (error) {
-      // Castear a any para permitir instanceof
       if ((error as any) instanceof Error) {
         console.error('Error al solicitar permisos:', (error as Error).message);
         onScanError?.(new Error('Error al solicitar permisos: ' + (error as Error).message));
@@ -220,11 +219,13 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
       startScan();
     } catch (error) {
       if ((error as any) instanceof Error) {
-        console.error('Error al desconectar:', (error as Error).message);
-        onScanError?.(new Error('Error al desconectar: ' + (error as Error).message));
+        if ((error as Error).message.includes('is not connected')) {
+          console.log('Dispositivo ya desconectado, ignorando error');
+        } else {
+          console.error('Error al desconectar:', (error as Error).message);
+        }
       } else {
         console.error('Error inesperado al desconectar:', error);
-        onScanError?.(new Error('Error inesperado al desconectar'));
       }
       setConnectedDevice(null);
       setDevices([]);
@@ -273,7 +274,14 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
   const sendEmergencyMessage = async () => {
     if (!isSimulation && (!hasSmsPermission || !hasLocationPermission)) {
       console.log('Verificación de permisos fallida:', { hasSmsPermission, hasLocationPermission });
-      Alert.alert('Error', 'Faltan permisos para enviar SMS o acceder a la ubicación');
+      Alert.alert(
+        'Error',
+        'Faltan permisos para enviar SMS o acceder a la ubicación. Por favor, otorga el permiso de SMS en los ajustes de la aplicación.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Ir a Ajustes', onPress: () => Linking.openSettings() },
+        ]
+      );
       return;
     } else if (isSimulation && !hasLocationPermission) {
       console.log('Verificación de permisos fallida (modo simulación):', { hasLocationPermission });
@@ -299,33 +307,32 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
       const locationUrl = `https://www.google.com/maps?q=${location.latitude},${location.longitude}`;
       const message = `${emergencyMessage} - Enviado por ${userName}\nUbicación: ${locationUrl}`;
 
-     if (isSimulation) {
-  console.log('Simulando SMS a:', emergencyContact, 'con mensaje:', message);
-  Alert.alert('Simulación', `Mensaje simulado enviado a ${emergencyContact}:\n${message}`);
-} else {
-  console.log('Enviando SMS real a:', emergencyContact);
-  await SMS.send(
-    { body: message, recipients: [emergencyContact] },
-    (completed, cancelled, error) => {
-      if (completed) {
-        console.log('SMS enviado exitosamente con ubicación');
-        Alert.alert('Éxito', 'Mensaje de emergencia enviado con ubicación');
-      } else if (cancelled) {
-        console.log('Envío de SMS cancelado');
-        Alert.alert('Cancelado', 'El envío del mensaje fue cancelado');
-      } else if (error) {
-        if (typeof error === 'object' && error !== null && 'message' in error) {
-          console.error('Error al enviar SMS:', (error as Error).message);
-          Alert.alert('Error', 'No se pudo enviar el mensaje de emergencia');
-        } else {
-          console.error('Error inesperado al enviar SMS:', error);
-          Alert.alert('Error', 'No se pudo enviar el mensaje de emergencia');
-        }
+      if (isSimulation) {
+        console.log('Simulando SMS a:', emergencyContact, 'con mensaje:', message);
+        Alert.alert('Simulación', `Mensaje simulado enviado a ${emergencyContact}:\n${message}`);
+      } else {
+        console.log('Enviando SMS real a:', emergencyContact);
+        await SMS.send(
+          { body: message, recipients: [emergencyContact] },
+          (completed, cancelled, error) => {
+            if (completed) {
+              console.log('SMS enviado exitosamente con ubicación');
+              Alert.alert('Éxito', 'Mensaje de emergencia enviado con ubicación');
+            } else if (cancelled) {
+              console.log('Envío de SMS cancelado');
+              Alert.alert('Cancelado', 'El envío del mensaje fue cancelado');
+            } else if (error) {
+              if (typeof error === 'object' && error !== null && 'message' in error) {
+                console.error('Error al enviar SMS:', (error as Error).message);
+                Alert.alert('Error', 'No se pudo enviar el mensaje de emergencia');
+              } else {
+                console.error('Error inesperado al enviar SMS:', error);
+                Alert.alert('Error', 'No se pudo enviar el mensaje de emergencia');
+              }
+            }
+          }
+        );
       }
-    }
-  );
-}
-
     } catch (error) {
       if ((error as any) instanceof Error) {
         console.error('Error en sendEmergencyMessage:', (error as Error).message);
@@ -338,81 +345,85 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
   };
 
   // Monitorear presión del botón
-// Monitorear presión del botón
-const monitorButtonPress = async (device: Device) => {
-  try {
-    console.log('Iniciando monitoreo de pulsaciones de botón BLE...');
-    
-    // Descubrir servicios y características
-    await device.discoverAllServicesAndCharacteristics();
-    console.log('Servicios y características descubiertos');
+  const monitorButtonPress = async (device: Device) => {
+    try {
+      console.log('Iniciando monitoreo de pulsaciones de botón BLE...');
+      
+      // Descubrir servicios y características
+      await device.discoverAllServicesAndCharacteristics();
+      console.log('Servicios y características descubiertos');
 
-    // Obtener servicios y características para depuración
-    const services = await device.services();
-    console.log('Servicios disponibles:', services.map(s => s.uuid));
-    const characteristics = await device.characteristicsForService(SERVICE_UUID);
-    console.log('Características disponibles:', characteristics.map(c => c.uuid));
+      // Obtener servicios y características para depuración
+      const services = await device.services();
+      console.log('Servicios disponibles:', services.map(s => s.uuid));
+      const characteristics = await device.characteristicsForService(SERVICE_UUID);
+      console.log('Características disponibles:', characteristics.map(c => c.uuid));
 
-    // Verificar si la característica existe
-    const targetCharacteristic = characteristics.find(c => c.uuid === CHARACTERISTIC_UUID);
-    if (!targetCharacteristic) {
-      console.error('Característica con UUID', CHARACTERISTIC_UUID, 'no encontrada');
-      return;
-    }
-
-    // Configurar la suscripción
-    if (subscriptionRef.current) {
-      subscriptionRef.current.remove();
-      console.log('Suscripción previa eliminada');
-    }
-
-    subscriptionRef.current = device.monitorCharacteristicForService(
-      SERVICE_UUID,
-      CHARACTERISTIC_UUID,
-      (error, characteristic) => {
-        if (error) {
-          if ((error as any) instanceof Error) {
-            console.error('Error al monitorear la característica:', (error as Error).message);
-          } else {
-            console.error('Error inesperado al monitorear la característica:', error);
-          }
-          return;
-        }
-
-        if (characteristic?.value) {
-          try {
-            const decoded = Buffer.from(characteristic.value, 'base64').toString('utf8').trim();
-            console.log('Valor recibido desde la placa BLE:', decoded);
-
-            if (decoded === '1') {
-              console.log('Botón presionado en la placa, enviando mensaje de emergencia...');
-              sendEmergencyMessage();
-              if (onButtonPress) onButtonPress();
-            } else {
-              console.log('Valor recibido no es 1:', decoded);
-            }
-          } catch (decodeError) {
-            if ((decodeError as any) instanceof Error) {
-              console.error('Error al decodificar valor:', (decodeError as Error).message);
-            } else {
-              console.error('Error inesperado al decodificar valor:', decodeError);
-            }
-          }
-        } else {
-          console.log('Característica sin valor recibido, revisa si es notificable o si la placa envía datos');
-        }
+      // Verificar si la característica existe
+      const targetCharacteristic = characteristics.find(c => c.uuid === CHARACTERISTIC_UUID);
+      if (!targetCharacteristic) {
+        console.error('Característica con UUID', CHARACTERISTIC_UUID, 'no encontrada');
+        return;
       }
-    );
-    console.log('Suscripción configurada con éxito');
-  } catch (error) {
-    if ((error as any) instanceof Error) {
-      console.error('Error al configurar el monitoreo:', (error as Error).message);
-    } else {
-      console.error('Error inesperado al configurar el monitoreo:', error);
-    }
-  }
-};
 
+      // Configurar la suscripción
+      if (subscriptionRef.current) {
+        subscriptionRef.current.remove();
+        console.log('Suscripción previa eliminada');
+      }
+
+      subscriptionRef.current = device.monitorCharacteristicForService(
+        SERVICE_UUID,
+        CHARACTERISTIC_UUID,
+        (error, characteristic) => {
+          if (error) {
+            if ((error as any) instanceof Error) {
+              // Ignorar el error de "Operation was cancelled" como no crítico
+              if ((error as Error).message.includes('Operation was cancelled')) {
+                console.log('Monitoreo cancelado, operación esperada al desconectar');
+              } else {
+                console.error('Error al monitorear la característica:', (error as Error).message);
+              }
+            } else {
+              console.error('Error inesperado al monitorear la característica:', error);
+            }
+            return;
+          }
+
+          if (characteristic?.value) {
+            console.log('Valor raw recibido (base64):', characteristic.value); // Log del valor base64
+            try {
+              const decoded = atob(characteristic.value).trim(); // Decodificar base64 a string
+              console.log('Valor decodificado desde la placa BLE:', decoded);
+
+              if (decoded === '1') {
+                console.log('Botón presionado en la placa, enviando mensaje de emergencia...');
+                sendEmergencyMessage();
+                if (onButtonPress) onButtonPress();
+              } else {
+                console.log('Valor recibido no es "1":', decoded);
+              }
+            } catch (decodeError) {
+              if ((decodeError as any) instanceof Error) {
+                console.error('Error al decodificar valor:', (decodeError as Error).message);
+              } else {
+                console.error('Error inesperado al decodificar valor:', decodeError);
+              }
+            }
+          } else {
+            console.log('Característica sin valor recibido, revisa si es notificable o si la placa envía datos');
+          }
+        }
+      );
+      console.log('Suscripción configurada con éxito');
+    } catch (error) {
+      if ((error as any) instanceof Error) {
+        console.error('Error al configurar el monitoreo:', (error as Error).message);
+      } else {
+        console.error('Error inesperado al configurar el monitoreo:', error);
+      }
+    }
+  };
 
   // Efecto para manejar el escaneo inicial
   useEffect(() => {
@@ -433,12 +444,24 @@ const monitorButtonPress = async (device: Device) => {
     return () => {
       manager?.stopDeviceScan();
       if (connectedDevice) {
-        connectedDevice.cancelConnection().catch((error) => {
-          if ((error as any) instanceof Error) {
-            console.error('Error al limpiar conexión:', (error as Error).message);
+        connectedDevice.isConnected().then((isConnected) => {
+          if (isConnected) {
+            connectedDevice.cancelConnection().catch((error) => {
+              if ((error as any) instanceof Error) {
+                if (!(error as Error).message.includes('is not connected')) {
+                  console.error('Error al limpiar conexión:', (error as Error).message);
+                } else {
+                  console.log('Dispositivo ya desconectado, ignorando error');
+                }
+              } else {
+                console.error('Error inesperado al limpiar conexión:', error);
+              }
+            });
           } else {
-            console.error('Error inesperado al limpiar conexión:', error);
+            console.log('Dispositivo ya desconectado al desmontar, omitiendo cancelación');
           }
+        }).catch((error) => {
+          console.error('Error al verificar conexión al desmontar:', (error as Error).message);
         });
       }
       if (subscriptionRef.current) {
