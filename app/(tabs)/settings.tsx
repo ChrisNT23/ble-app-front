@@ -1,53 +1,106 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 
+// URL de producción
+const API_URL = 'https://ble-app-back.onrender.com/api';
+
 export default function SettingsScreen() {
   const [name, setName] = useState('');
   const [emergencyContact, setEmergencyContact] = useState('');
   const [emergencyMessage, setEmergencyMessage] = useState('');
-  const [settingsId, setSettingsId] = useState(null);
+  const [settingsId, setSettingsId] = useState<string | null>(null);
   const [isEditable, setIsEditable] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
 
   // Cargar datos guardados al montar el componente
   useEffect(() => {
-    const loadSettings = async () => {
+    const loadUserAndSettings = async () => {
       try {
-        // Intentar cargar desde el backend con reintentos
+        // Primero cargar el ID del usuario y token desde AsyncStorage
+        const userData = await AsyncStorage.getItem('userData');
+        console.log('UserData from AsyncStorage:', userData);
+
+        if (!userData) {
+          Alert.alert('Error', 'No se encontró información del usuario');
+          router.replace('/(auth)/login');
+          return;
+        }
+
+        const { id, token: userToken } = JSON.parse(userData);
+        console.log('User ID:', id);
+        console.log('User Token:', userToken);
+
+        setUserId(id);
+        setToken(userToken);
+
+        // Configurar el token en axios para todas las peticiones
+        axios.defaults.headers.common['Authorization'] = `Bearer ${userToken}`;
+
+        // Intentar cargar la configuración del usuario desde el backend
         let attempts = 3;
         let success = false;
         let settings = null;
 
         while (attempts > 0 && !success) {
           try {
-            const response = await axios.get('https://ble-app-back.onrender.com/settings', { timeout: 5000 }); // Reemplaza con tu IP
+            console.log('Attempting to fetch settings for user:', id);
+            const response = await axios.get(`${API_URL}/settings/${id}`, { timeout: 5000 });
+            console.log('Settings response:', response.data);
             settings = response.data;
             success = true;
           } catch (error: any) {
             console.warn(`Attempt ${4 - attempts} failed:`, error.message || 'Unknown error');
-            attempts--;
-            if (attempts === 0) throw error;
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            console.log('Error details:', error.response?.data);
+            
+            // Si es un error 404, significa que es un usuario nuevo
+            if (error.response?.status === 404) {
+              console.log('New user detected, initializing empty settings');
+              settings = {
+                userId: id,
+                name: '',
+                emergencyContact: '',
+                emergencyMessage: '',
+                isNew: true
+              };
+              success = true;
+            } else {
+              attempts--;
+              if (attempts === 0) throw error;
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
           }
         }
 
-        if (settings && settings._id) {
-          setName(settings.name || '');
-          setEmergencyContact(settings.emergencyContact || '');
-          setEmergencyMessage(settings.emergencyMessage || '');
-          setSettingsId(settings._id);
-          console.log('Loaded settings with ID:', settings._id);
-          setIsEditable(false);
+        if (settings) {
+          // Si es un usuario nuevo o no tiene configuración
+          if (settings.isNew || !settings.name) {
+            setName('');
+            setEmergencyContact('');
+            setEmergencyMessage('');
+            setIsEditable(true);
+          } else {
+            // Si tiene configuración existente
+            setName(settings.name || '');
+            setEmergencyContact(settings.emergencyContact || '');
+            setEmergencyMessage(settings.emergencyMessage || '');
+            setSettingsId(settings._id);
+            setIsEditable(false);
+          }
         } else {
-          // Si no hay datos en el backend, cargar desde AsyncStorage
-          const savedName = await AsyncStorage.getItem('userName');
-          const savedContact = await AsyncStorage.getItem('emergencyContact');
-          const savedMessage = await AsyncStorage.getItem('emergencyMessage');
+          // Fallback a AsyncStorage si todo falla
+          console.log('No settings found, loading from AsyncStorage');
+          const savedName = await AsyncStorage.getItem(`userName_${id}`);
+          const savedContact = await AsyncStorage.getItem(`emergencyContact_${id}`);
+          const savedMessage = await AsyncStorage.getItem(`emergencyMessage_${id}`);
+          console.log('Saved data from AsyncStorage:', { savedName, savedContact, savedMessage });
           if (savedName) setName(savedName);
           if (savedContact) setEmergencyContact(savedContact);
           if (savedMessage) setEmergencyMessage(savedMessage);
@@ -55,76 +108,86 @@ export default function SettingsScreen() {
         }
       } catch (error: any) {
         console.error('Error loading settings:', error.message || error);
-        // Cargar desde AsyncStorage si falla el backend
-        const savedName = await AsyncStorage.getItem('userName');
-        const savedContact = await AsyncStorage.getItem('emergencyContact');
-        const savedMessage = await AsyncStorage.getItem('emergencyMessage');
-        if (savedName) setName(savedName);
-        if (savedContact) setEmergencyContact(savedContact);
-        if (savedMessage) setEmergencyMessage(savedMessage);
-        setIsEditable(true);
+        console.log('Full error object:', error);
+        Alert.alert('Error', 'No se pudieron cargar los datos de configuración');
       }
     };
-    loadSettings();
+
+    loadUserAndSettings();
   }, []);
 
   // Guardar o actualizar datos
-const saveSettings = async () => {
-  try {
-    const settings = { name, emergencyContact, emergencyMessage };
-
-    // Validar y formatear el número de emergencia
-    let formattedContact = emergencyContact.trim();
-    if (formattedContact && !formattedContact.startsWith('+593')) {
-      if (formattedContact.startsWith('0')) {
-        formattedContact = '+593' + formattedContact.slice(1); // Convierte 0987654321 a +593987654321
-      } else {
-        formattedContact = '+593' + formattedContact; // Añade +593 si no lo tiene
-      }
-    }
-
-    if (!formattedContact || !emergencyMessage || !name) {
-      Alert.alert('Error', 'Por favor, completa todos los campos.');
+  const saveSettings = async () => {
+    if (!userId || !token) {
+      Alert.alert('Error', 'No se encontró información del usuario');
       return;
     }
 
-    const updatedSettings = { name, emergencyContact: formattedContact, emergencyMessage };
+    try {
+      const settings = { 
+        userId,
+        name, 
+        emergencyContact, 
+        emergencyMessage 
+      };
 
-    let response;
-    if (settingsId) {
-      response = await axios.put(`https://ble-app-back.onrender.com/settings/${settingsId}`, updatedSettings);
-      console.log('Settings updated:', response.data);
-    } else {
-      response = await axios.post('https://ble-app-back.onrender.com/settings', updatedSettings);
-      const newId = response.data._id;
-      if (newId) {
-        setSettingsId(newId);
-        console.log('Settings created with ID:', newId);
-      } else {
-        console.warn('No _id returned from POST response');
+      // Validar y formatear el número de emergencia
+      let formattedContact = emergencyContact.trim();
+      if (formattedContact && !formattedContact.startsWith('+593')) {
+        if (formattedContact.startsWith('0')) {
+          formattedContact = '+593' + formattedContact.slice(1);
+        } else {
+          formattedContact = '+593' + formattedContact;
+        }
       }
+
+      if (!formattedContact || !emergencyMessage || !name) {
+        Alert.alert('Error', 'Por favor, completa todos los campos.');
+        return;
+      }
+
+      const updatedSettings = { 
+        userId,
+        name, 
+        emergencyContact: formattedContact, 
+        emergencyMessage 
+      };
+
+      let response;
+      if (settingsId) {
+        response = await axios.put(`${API_URL}/settings/${settingsId}`, updatedSettings);
+        console.log('Settings updated:', response.data);
+      } else {
+        response = await axios.post(`${API_URL}/settings`, updatedSettings);
+        const newId = response.data._id;
+        if (newId) {
+          setSettingsId(newId);
+          console.log('Settings created with ID:', newId);
+        }
+      }
+
+      // Guardar en AsyncStorage como respaldo
+      await AsyncStorage.setItem(`userName_${userId}`, name);
+      await AsyncStorage.setItem(`emergencyContact_${userId}`, formattedContact);
+      await AsyncStorage.setItem(`emergencyMessage_${userId}`, emergencyMessage);
+
+      setIsEditable(false);
+      Alert.alert('Éxito', 'Configuración guardada correctamente');
+
+      // Recargar los datos después de guardar
+      await loadSettingsAgain();
+    } catch (error: any) {
+      console.error('Error saving settings:', error.message || error);
+      Alert.alert('Error', 'No se pudo guardar la configuración');
     }
-
-    // Guardar en AsyncStorage como respaldo
-    await AsyncStorage.setItem('userName', name);
-    await AsyncStorage.setItem('emergencyContact', formattedContact);
-    await AsyncStorage.setItem('emergencyMessage', emergencyMessage);
-
-    setIsEditable(false);
-    Alert.alert('Éxito', 'Configuración guardada correctamente');
-
-    // Recargar los datos después de guardar
-    await loadSettingsAgain();
-  } catch (error: any) {
-    console.error('Error saving settings:', error.message || error);
-    Alert.alert('Error', 'No se pudo guardar la configuración');
-  }
-};
+  };
 
   // Función para recargar los datos
   const loadSettingsAgain = async () => {
+    if (!userId) return;
+
     try {
-      const response = await axios.get('https://ble-app-back.onrender.com/settings', { timeout: 5000 });
+      const response = await axios.get(`${API_URL}/settings/${userId}`, { timeout: 5000 });
       const settings = response.data;
       if (settings && settings._id) {
         setName(settings.name || '');
@@ -141,6 +204,32 @@ const saveSettings = async () => {
   // Habilitar edición
   const enableEditing = () => {
     setIsEditable(true);
+  };
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Cerrar Sesión',
+      '¿Estás seguro que deseas cerrar sesión?',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel'
+        },
+        {
+          text: 'Cerrar Sesión',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await AsyncStorage.removeItem('userData');
+              router.replace('/(auth)/login');
+            } catch (error: any) {
+              console.error('Error al cerrar sesión:', error.message || error);
+              Alert.alert('Error', 'No se pudo cerrar sesión correctamente');
+            }
+          }
+        }
+      ]
+    );
   };
 
   return (
@@ -199,6 +288,16 @@ const saveSettings = async () => {
             <ThemedText style={styles.editText}>Editar</ThemedText>
           </TouchableOpacity>
         )}
+      </ThemedView>
+
+      <ThemedView style={styles.section}>
+        <TouchableOpacity 
+          style={styles.logoutButton}
+          onPress={handleLogout}
+        >
+          <MaterialIcons name="logout" size={24} color="#FF3B30" />
+          <ThemedText style={styles.logoutText}>Cerrar Sesión</ThemedText>
+        </TouchableOpacity>
       </ThemedView>
     </ThemedView>
   );
@@ -269,5 +368,21 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  section: {
+    marginBottom: 24,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3F3',
+    padding: 16,
+    borderRadius: 8,
+    gap: 12,
+  },
+  logoutText: {
+    color: '#FF3B30',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
