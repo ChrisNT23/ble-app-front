@@ -69,42 +69,57 @@ export default function SettingsScreen() {
   }, []);
 
   // Guardar o actualizar datos
-  const saveSettings = async () => {
-    try {
-      const settings = { name, emergencyContact, emergencyMessage };
+const saveSettings = async () => {
+  try {
+    const settings = { name, emergencyContact, emergencyMessage };
 
-      let response;
-      if (settingsId) {
-        // Actualizar datos existentes
-        response = await axios.put(`https://ble-app-back.onrender.com/settings/${settingsId}`, settings);
-        console.log('Settings updated:', response.data);
+    // Validar y formatear el número de emergencia
+    let formattedContact = emergencyContact.trim();
+    if (formattedContact && !formattedContact.startsWith('+593')) {
+      if (formattedContact.startsWith('0')) {
+        formattedContact = '+593' + formattedContact.slice(1); // Convierte 0987654321 a +593987654321
       } else {
-        // Crear nuevos datos
-        response = await axios.post('https://ble-app-back.onrender.com/settings', settings);
-        const newId = response.data._id;
-        if (newId) {
-          setSettingsId(newId);
-          console.log('Settings created with ID:', newId);
-        } else {
-          console.warn('No _id returned from POST response');
-        }
+        formattedContact = '+593' + formattedContact; // Añade +593 si no lo tiene
       }
-
-      // Guardar en AsyncStorage como respaldo
-      await AsyncStorage.setItem('userName', name);
-      await AsyncStorage.setItem('emergencyContact', emergencyContact);
-      await AsyncStorage.setItem('emergencyMessage', emergencyMessage);
-
-      setIsEditable(false);
-      Alert.alert('Éxito', 'Configuración guardada correctamente');
-
-      // Recargar los datos después de guardar
-      await loadSettingsAgain();
-    } catch (error: any) {
-      console.error('Error saving settings:', error.message || error);
-      Alert.alert('Error', 'No se pudo guardar la configuración');
     }
-  };
+
+    if (!formattedContact || !emergencyMessage || !name) {
+      Alert.alert('Error', 'Por favor, completa todos los campos.');
+      return;
+    }
+
+    const updatedSettings = { name, emergencyContact: formattedContact, emergencyMessage };
+
+    let response;
+    if (settingsId) {
+      response = await axios.put(`https://ble-app-back.onrender.com/settings/${settingsId}`, updatedSettings);
+      console.log('Settings updated:', response.data);
+    } else {
+      response = await axios.post('https://ble-app-back.onrender.com/settings', updatedSettings);
+      const newId = response.data._id;
+      if (newId) {
+        setSettingsId(newId);
+        console.log('Settings created with ID:', newId);
+      } else {
+        console.warn('No _id returned from POST response');
+      }
+    }
+
+    // Guardar en AsyncStorage como respaldo
+    await AsyncStorage.setItem('userName', name);
+    await AsyncStorage.setItem('emergencyContact', formattedContact);
+    await AsyncStorage.setItem('emergencyMessage', emergencyMessage);
+
+    setIsEditable(false);
+    Alert.alert('Éxito', 'Configuración guardada correctamente');
+
+    // Recargar los datos después de guardar
+    await loadSettingsAgain();
+  } catch (error: any) {
+    console.error('Error saving settings:', error.message || error);
+    Alert.alert('Error', 'No se pudo guardar la configuración');
+  }
+};
 
   // Función para recargar los datos
   const loadSettingsAgain = async () => {
