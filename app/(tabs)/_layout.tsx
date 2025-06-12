@@ -69,7 +69,7 @@ export default function TabLayout() {
           name="connect"
           options={{
             title: 'Conexión',
-            tabBarIcon: ({ color }) => <Icon name="wifi" size={20} color={color} />,
+            tabBarIcon: ({ color }) => <Icon name="bluetooth" size={20} color={color} />,
           }}
         />
         <Tabs.Screen

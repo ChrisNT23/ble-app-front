@@ -1,6 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
-import * as SMS from 'expo-sms';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Linking, PermissionsAndroid, Platform, StyleSheet, TouchableOpacity } from 'react-native';
 import { BleManager, Device } from 'react-native-ble-plx';
@@ -37,11 +35,122 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
   const [hasBleConnectPermission, setHasBleConnectPermission] = useState(false);
   const [hasSmsPermission, setHasSmsPermission] = useState(false);
   const [hasLocationPermission, setHasLocationPermission] = useState(false);
-  const bleManager = useRef<BleManager>(new BleManager());
-  const subscriptionRef = useRef<number | null>(null); // Cambiado a number | null
+  const [isBleManagerReady, setIsBleManagerReady] = useState(false);
+  const bleManagerInstance = useRef<BleManager | null>(null);
+  const subscriptionRef = useRef<number | null>(null);
+  const isMounted = useRef(true);
+  const scanTimeoutRef = useRef<number | null>(null);
+  const isInitializing = useRef(false);
+  const initializationAttempts = useRef(0);
+  const initializationPromise = useRef<Promise<void> | null>(null);
 
   // Variable de simulación: cuando es true, se simula el envío con un Alert; cuando es false, se envía un SMS real
-  const isSimulation = false; // Cambia a false antes de construir la APK para enviar SMS reales
+  const isSimulation = true; // Cambia a false antes de construir la APK para enviar SMS reales
+
+  // Inicializar BleManager
+  useEffect(() => {
+    isMounted.current = true;
+    let localBleManager: BleManager | null = null;
+
+    const initializeBle = async () => {
+      if (Platform.OS === 'web') {
+        onScanError?.(new Error('BLE is not supported on web'));
+        return;
+      }
+
+      // Si ya hay una inicialización en curso, esperar a que termine
+      if (initializationPromise.current) {
+        console.log('Esperando a que termine la inicialización en curso...');
+        await initializationPromise.current;
+        return;
+      }
+
+      if (isInitializing.current) {
+        console.log('Ya hay una inicialización en curso...');
+        return;
+      }
+
+      if (initializationAttempts.current >= 3) {
+        console.error('Demasiados intentos de inicialización');
+        Alert.alert(
+          'Error de Bluetooth',
+          'No se pudo inicializar el Bluetooth. Por favor, reinicia la aplicación.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      try {
+        isInitializing.current = true;
+        initializationAttempts.current += 1;
+        console.log('Inicializando BleManager... Intento:', initializationAttempts.current);
+
+        // Crear una nueva promesa de inicialización
+        initializationPromise.current = (async () => {
+          // Destruir cualquier instancia existente
+          if (localBleManager) {
+            console.log('Destruyendo instancia anterior de BleManager...');
+            localBleManager.destroy();
+            localBleManager = null;
+          }
+
+          if (bleManagerInstance.current) {
+            console.log('Destruyendo instancia actual de BleManager...');
+            bleManagerInstance.current.destroy();
+            bleManagerInstance.current = null;
+          }
+
+          // Crear nueva instancia
+          localBleManager = new BleManager();
+          bleManagerInstance.current = localBleManager;
+          
+          // Esperar a que el BleManager esté listo
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          if (isMounted.current) {
+            setIsBleManagerReady(true);
+            console.log('BleManager inicializado correctamente');
+            initializationAttempts.current = 0; // Resetear contador de intentos
+          }
+
+          const hasPermissions = await requestPermissions();
+          if (hasPermissions && !connectedDevice && isMounted.current) {
+            startScan();
+          }
+        })();
+
+        await initializationPromise.current;
+      } catch (error) {
+        console.error('Error al inicializar BLE:', error);
+        if (isMounted.current) {
+          onScanError?.(new Error('Error al inicializar BLE'));
+        }
+      } finally {
+        isInitializing.current = false;
+        initializationPromise.current = null;
+      }
+    };
+
+    initializeBle();
+
+    return () => {
+      isMounted.current = false;
+      if (scanTimeoutRef.current) {
+        clearTimeout(scanTimeoutRef.current);
+        scanTimeoutRef.current = null;
+      }
+      if (subscriptionRef.current) {
+        clearInterval(subscriptionRef.current);
+        subscriptionRef.current = null;
+      }
+      if (localBleManager) {
+        console.log('Destruyendo BleManager...');
+        localBleManager.destroy();
+        bleManagerInstance.current = null;
+        setIsBleManagerReady(false);
+      }
+    };
+  }, []);
 
   const checkPermissions = async (): Promise<boolean> => {
     if (Platform.OS !== 'android') return true;
@@ -147,61 +256,82 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
       return;
     }
 
-    const hasPermissions = await checkPermissions();
-    console.log('Permisos verificados en startScan:', {
-      hasBleScanPermission,
-      hasBleConnectPermission,
-      hasLocationPermission,
-      hasSmsPermission,
-    });
-
-    if (!hasPermissions) {
-      Alert.alert(
-        'Error de permisos',
-        'Permisos BLE no otorgados. Ve a Ajustes > Aplicaciones > Ble-Connection > Permisos y habilita Bluetooth, Acceso a dispositivos cercanos y Ubicación. Asegúrate de que el Bluetooth esté encendido y desactiva la optimización de batería en Ajustes > Batería. Reinicia la app si persiste.',
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          { text: 'Ir a Ajustes', onPress: () => Linking.openSettings() },
-        ]
-      );
-      return;
-    }
-
     try {
-      setIsScanning(true);
-      setDevices([]);
-      console.log('Iniciando escaneo de dispositivos BLE...');
-      bleManager.current.startDeviceScan([SERVICE_UUID], null, (error: Error | null, device: Device | null) => {
-        if (error) {
-          console.error('Error durante el escaneo:', error.message);
-          onScanError?.(new Error(error.message));
-          setIsScanning(false);
+      // Esperar a que el BleManager esté listo si hay una inicialización en curso
+      if (initializationPromise.current) {
+        console.log('Esperando a que el BleManager esté listo...');
+        await initializationPromise.current;
+      }
+
+      const manager = bleManagerInstance.current;
+      if (!manager || !isBleManagerReady) {
+        console.log('BleManager no está disponible, reiniciando...');
+        if (!isInitializing.current && initializationAttempts.current < 3) {
+          console.log('Iniciando nueva inicialización...');
+          const newManager = new BleManager();
+          bleManagerInstance.current = newManager;
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          setIsBleManagerReady(true);
+          console.log('BleManager reiniciado correctamente');
+          return startScan();
+        } else {
+          console.error('No se pudo inicializar el BleManager después de varios intentos');
+          Alert.alert(
+            'Error de Bluetooth',
+            'No se pudo inicializar el Bluetooth. Por favor, reinicia la aplicación.',
+            [{ text: 'OK' }]
+          );
           return;
         }
+      }
+
+      setIsScanning(true);
+      setDevices([]);
+
+      // Usar los UUIDs correctos del ESP32
+      manager.startDeviceScan([SERVICE_UUID], null, (error, device) => {
+        if (error) {
+          console.error('Error al escanear:', error);
+          if (isMounted.current) {
+            onScanError?.(new Error('Error al escanear: ' + error.message));
+          }
+          return;
+        }
+
         if (device && device.name) {
           console.log('Dispositivo encontrado:', device.name, device.id);
           setDevices((prevDevices) => {
-            if (!prevDevices.some((d) => d.id === device.id)) {
+            const exists = prevDevices.some((d) => d.id === device.id);
+            if (!exists) {
               return [...prevDevices, device];
             }
             return prevDevices;
           });
         }
       });
-      setTimeout(() => {
-        bleManager.current.stopDeviceScan();
-        setIsScanning(false);
-        console.log('Escaneo detenido después de 5 segundos');
-      }, 5000);
-    } catch (error) {
-      if (error instanceof Error) {
-        console.error('Error al iniciar escaneo:', error.message);
-        onScanError?.(new Error(error.message));
-      } else {
-        console.error('Error al iniciar escaneo:', 'Unknown error');
-        onScanError?.(new Error('Unknown error'));
+
+      // Detener el escaneo después de 10 segundos
+      if (scanTimeoutRef.current) {
+        clearTimeout(scanTimeoutRef.current);
       }
-      setIsScanning(false);
+      scanTimeoutRef.current = setTimeout(() => {
+        if (isMounted.current && bleManagerInstance.current) {
+          bleManagerInstance.current.stopDeviceScan();
+          setIsScanning(false);
+        }
+      }, 10000);
+    } catch (error) {
+      console.error('Error al iniciar el escaneo:', error);
+      if (isMounted.current) {
+        setIsScanning(false);
+        onScanError?.(new Error('Error al iniciar el escaneo'));
+        // Intentar reiniciar el escaneo después de un error
+        setTimeout(() => {
+          if (isMounted.current) {
+            startScan();
+          }
+        }, 2000);
+      }
     }
   };
 
@@ -211,52 +341,110 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
       return;
     }
 
-    const device = devices.find((d) => d.id === deviceId);
-    if (device) {
+    try {
+      const manager = bleManagerInstance.current;
+      if (!manager || !isBleManagerReady) {
+        throw new Error('BleManager no está disponible');
+      }
+
+      const device = devices.find((d) => d.id === deviceId);
+      if (!device) {
+        throw new Error('Dispositivo no encontrado');
+      }
+
+      console.log('Intentando conectar a:', device.name, device.id);
+      
+      // Primero cancelar cualquier conexión existente
       try {
-        console.log('Intentando conectar a:', device.name, device.id);
-        const connectedDevice = await bleManager.current.connectToDevice(device.id);
-        await connectedDevice.discoverAllServicesAndCharacteristics();
+        await manager.cancelDeviceConnection(device.id);
+      } catch (e) {
+        console.log('No había conexión previa para cancelar');
+      }
+
+      // Intentar conectar con timeout
+      const connectedDevice = await Promise.race([
+        manager.connectToDevice(device.id),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout de conexión')), 10000)
+        )
+      ]) as Device;
+
+      console.log('Dispositivo conectado, descubriendo servicios...');
+      await connectedDevice.discoverAllServicesAndCharacteristics();
+      
+      // Verificar que el dispositivo sigue conectado
+      const isConnected = await connectedDevice.isConnected();
+      if (!isConnected) {
+        throw new Error('El dispositivo se desconectó después de la conexión');
+      }
+
+      if (isMounted.current) {
         setConnectedDevice(connectedDevice);
         onDeviceConnected(connectedDevice);
-        await monitorButtonPress(connectedDevice);
-      } catch (error) {
-        if (error instanceof Error) {
-          console.error('Error al conectar:', error.message);
+        
+        // Iniciar monitoreo después de una breve pausa
+        setTimeout(() => {
+          if (isMounted.current) {
+            monitorButtonPress(connectedDevice);
+          }
+        }, 1000);
+      }
+
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error('Error al conectar:', error.message);
+        if (isMounted.current) {
+          Alert.alert(
+            'Error de Conexión',
+            'No se pudo conectar al dispositivo. Por favor, intenta de nuevo.',
+            [{ text: 'OK' }]
+          );
           onScanError?.(new Error('Error al conectar: ' + error.message));
-        } else {
-          console.error('Error al conectar:', 'Unknown error');
+        }
+      } else {
+        console.error('Error al conectar:', 'Unknown error');
+        if (isMounted.current) {
           onScanError?.(new Error('Error al conectar: Unknown error'));
         }
+      }
+      if (isMounted.current) {
         setConnectedDevice(null);
       }
     }
   };
 
-  const disconnectDevice = async () => {
+  const disconnectFromDevice = async () => {
     if (Platform.OS === 'web') {
       onScanError?.(new Error('BLE is not supported on web'));
       return;
     }
-    if (!connectedDevice) {
-      onScanError?.(new Error('No device connected'));
-      return;
-    }
+
     try {
-      await bleManager.current.cancelDeviceConnection(connectedDevice.id);
-      console.log('Dispositivo desconectado exitosamente');
-      setConnectedDevice(null);
-      setDevices([]);
-      startScan();
-    } catch (error) {
-      if (error instanceof Error) {
-        console.error('Error al desconectar:', error.message);
-      } else {
-        console.error('Error al desconectar:', 'Unknown error');
+      const manager = bleManagerInstance.current;
+      if (!manager) {
+        throw new Error('BleManager no está disponible');
       }
-      setConnectedDevice(null);
-      setDevices([]);
-      startScan();
+
+      if (!connectedDevice) {
+        console.log('No hay dispositivo conectado para desconectar');
+        return;
+      }
+
+      try {
+        await manager.cancelDeviceConnection(connectedDevice.id);
+        console.log('Dispositivo desconectado exitosamente');
+        setConnectedDevice(null);
+      } catch (error) {
+        console.error('Error al desconectar:', error);
+        if (isMounted.current) {
+          onScanError?.(new Error('Error al desconectar: ' + (error instanceof Error ? error.message : 'Unknown error')));
+        }
+      }
+    } catch (error) {
+      console.error('Error al desconectar:', error);
+      if (isMounted.current) {
+        onScanError?.(new Error('Error al desconectar: ' + (error instanceof Error ? error.message : 'Unknown error')));
+      }
     }
   };
 
@@ -292,144 +480,115 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
     }
   };
 
-const sendEmergencyMessage = async () => {
-  const hasPermissions = await checkPermissions();
-  console.log('Permisos antes de enviar SMS:', {
-    hasBleScanPermission,
-    hasBleConnectPermission,
-    hasLocationPermission,
-    hasSmsPermission,
-  });
-  if (!hasPermissions) {
-    Alert.alert(
-      'Error de permisos',
-      'Permisos no otorgados. Ve a Ajustes > Aplicaciones > Ble-Connection > Permisos y habilita los permisos necesarios.',
-      [{ text: 'Ir a Ajustes', onPress: () => Linking.openSettings() }]
-    );
-    return;
-  }
-
-  try {
-    const emergencyContact = await AsyncStorage.getItem('emergencyContact');
-    const emergencyMessage = await AsyncStorage.getItem('emergencyMessage');
-    const userName = await AsyncStorage.getItem('userName');
-
-    if (!emergencyContact || !emergencyMessage || !userName) {
-      Alert.alert('Error', 'Falta información de emergencia. Por favor, completa la configuración.');
+  const sendEmergencyMessage = async () => {
+    if (Platform.OS === 'web') {
+      onScanError?.(new Error('BLE is not supported on web'));
       return;
     }
 
-    const location = await getLocation();
-    const locationUrl = `https://www.google.com/maps?q=${location.latitude},${location.longitude}`;
-    const message = `${emergencyMessage} - Enviado por ${userName}\nUbicación: ${locationUrl}`;
-
-    const { result } = await SMS.sendSMSAsync([emergencyContact], message);
-    if (result === 'sent') {
-      Alert.alert('Éxito', 'Mensaje de emergencia enviado con ubicación');
-    } else {
-      throw new Error('Failed to send SMS');
-    }
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error('Error en sendEmergencyMessage:', error.message);
-      Alert.alert('Error', 'Ocurrió un error al enviar el mensaje o obtener la ubicación');
-    } else {
-      console.error('Error en sendEmergencyMessage:', 'Unknown error');
-      Alert.alert('Error', 'Ocurrió un error al enviar el mensaje o obtener la ubicación');
-    }
-  }
-};
-
-  const monitorButtonPress = async (device: Device) => {
     try {
-      console.log('Iniciando monitoreo de pulsaciones de botón BLE...');
-      const pollCharacteristic = async () => {
-        if (!subscriptionRef.current) {
-          subscriptionRef.current = setInterval(async () => {
-            try {
-              const characteristic = await device.readCharacteristicForService(SERVICE_UUID, CHARACTERISTIC_UUID);
-              if (characteristic?.value) {
-                console.log('Valor raw recibido:', characteristic.value);
-                const decoded = atob(characteristic.value).trim();
-                console.log('Valor decodificado desde la placa BLE:', decoded);
+      const manager = bleManagerInstance.current;
+      if (!manager) {
+        throw new Error('BleManager no está disponible');
+      }
 
-                if (decoded === '1') {
-                  console.log('Botón presionado en la placa, enviando mensaje de emergencia...');
-                  sendEmergencyMessage();
-                  if (onButtonPress) onButtonPress();
-                } else {
-                  console.log('Valor recibido no es "1":', decoded);
-                }
-              }
-            } catch (error) {
-              if (error instanceof Error) {
-                console.error('Error al leer característica:', error.message);
-              } else {
-                console.error('Error al leer característica:', 'Unknown error');
-              }
-              clearInterval(subscriptionRef.current!);
-              subscriptionRef.current = null;
-            }
-          }, 1000); // Polling cada 1 segundo
+      if (!hasSmsPermission) {
+        console.log('Solicitando permiso de SMS...');
+        const permissionStatus = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.SEND_SMS
+        );
+        setHasSmsPermission(permissionStatus === PermissionsAndroid.RESULTS.GRANTED);
+        
+        if (permissionStatus !== PermissionsAndroid.RESULTS.GRANTED) {
+          throw new Error('Permiso de SMS no otorgado');
         }
-      };
+      }
 
-      await pollCharacteristic();
-      console.log('Monitoreo configurado con polling');
+      // Simular envío de SMS (reemplazar con implementación real)
+      Alert.alert(
+        'Mensaje de Emergencia',
+        'Se ha enviado un mensaje de emergencia a tu contacto.',
+        [{ text: 'OK' }]
+      );
+      
+      onButtonPress?.();
     } catch (error) {
-      if (error instanceof Error) {
-        console.error('Error al configurar el monitoreo:', error.message);
-      } else {
-        console.error('Error al configurar el monitoreo:', 'Unknown error');
+      console.error('Error al enviar mensaje:', error);
+      if (isMounted.current) {
+        onScanError?.(new Error('Error al enviar mensaje: ' + (error instanceof Error ? error.message : 'Unknown error')));
       }
     }
   };
 
-  useEffect(() => {
+  const monitorButtonPress = async (device: Device) => {
     if (Platform.OS === 'web') {
-      onScanError?.(new Error('BLE no soportado o BleManager no inicializado'));
+      onScanError?.(new Error('BLE is not supported on web'));
       return;
     }
 
-    const initializeBle = async () => {
-      const hasPermissions = await requestPermissions();
-      if (hasPermissions && !connectedDevice) {
-        startScan();
-      } else if (!hasPermissions) {
-        const recheckPermissions = await checkPermissions();
-        if (!recheckPermissions) {
-          Alert.alert(
-            'Error de permisos',
-            'Permisos BLE no otorgados. Ve a Ajustes > Aplicaciones > Ble-Connection > Permisos y habilita Bluetooth. Asegúrate de que el Bluetooth esté encendido y desactiva la optimización de batería en ' +
-              (Platform.OS === 'android' ? 'Ajustes > Batería' : 'los ajustes del sistema').toLowerCase() +
-              '.',
-            [
-              { text: 'Cancelar', style: 'cancel' },
-              { text: 'Ir a Ajustes', onPress: () => Linking.openSettings() },
-            ]
-          );
-        } else {
-          startScan();
+    try {
+      const manager = bleManagerInstance.current;
+      if (!manager) {
+        throw new Error('BleManager no está disponible');
+      }
+
+      console.log('Iniciando monitoreo de botón...');
+      
+      // Verificar que el dispositivo sigue conectado
+      const isConnected = await device.isConnected();
+      if (!isConnected) {
+        throw new Error('El dispositivo no está conectado');
+      }
+
+      // Suscribirse a las notificaciones
+      await device.monitorCharacteristicForService(
+        SERVICE_UUID,
+        CHARACTERISTIC_UUID,
+        (error, characteristic) => {
+          if (error) {
+            console.log('Notificación recibida:', error.message);
+            // Si es un error de desconexión, manejarlo de forma más elegante
+            if (error.message.includes('disconnected')) {
+              console.log('Dispositivo desconectado');
+              if (isMounted.current) {
+                setConnectedDevice(null);
+                Alert.alert(
+                  'Dispositivo Desconectado',
+                  'La conexión con el dispositivo se ha perdido.',
+                  [{ text: 'OK' }]
+                );
+                startScan();
+              }
+            } else {
+              console.error('Error en notificación:', error);
+            }
+            return;
+          }
+
+          if (characteristic?.value) {
+            // Decodificar el valor base64 sin usar Buffer
+            const value = atob(characteristic.value);
+            console.log('Valor recibido:', value);
+            
+            if (value === '1') {
+              console.log('¡Botón presionado! Enviando mensaje de emergencia...');
+              sendEmergencyMessage();
+            }
+          }
         }
-      }
-    };
+      );
 
-    initializeBle();
-
-    return () => {
-      bleManager.current.destroy();
-      if (connectedDevice) {
-        bleManager.current.cancelDeviceConnection(connectedDevice.id).catch((error: Error) => {
-          console.error('Error al limpiar conexión:', error.message);
-        });
+      console.log('Monitoreo de botón iniciado correctamente');
+    } catch (error) {
+      console.error('Error al iniciar monitoreo:', error);
+      if (isMounted.current) {
+        onScanError?.(new Error('Error al iniciar monitoreo: ' + (error instanceof Error ? error.message : 'Unknown error')));
+        // Intentar reconectar si hay un error
+        setConnectedDevice(null);
+        startScan();
       }
-      if (subscriptionRef.current) {
-        clearInterval(subscriptionRef.current);
-        console.log('Monitoreo eliminado al desmontar componente');
-        subscriptionRef.current = null;
-      }
-    };
-  }, [connectedDevice]);
+    }
+  };
 
   useEffect(() => {
     let interval: number;
@@ -459,7 +618,7 @@ const sendEmergencyMessage = async () => {
               <ThemedText style={styles.connectedText}>
                 Conectado a: {connectedDevice.name || 'Unnamed Device'}
               </ThemedText>
-              <TouchableOpacity onPress={disconnectDevice} style={styles.disconnectButton}>
+              <TouchableOpacity onPress={disconnectFromDevice} style={styles.disconnectButton}>
                 <ThemedText style={styles.disconnectText}>Desconectar</ThemedText>
               </TouchableOpacity>
             </>
