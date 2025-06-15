@@ -8,6 +8,7 @@ import { Tabs } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome';
+import { BleProvider } from '../../context/BleContext';
 
 // Example of aliasing imports if there are conflicts
 // import { AndroidCheckBox as CheckBox1 } from 'library1';
@@ -26,7 +27,7 @@ export default function TabLayout() {
         }
       } catch (error) {
         console.error('Error al verificar aceptación de términos:', error);
-        setShowTermsModal(true); // Mostrar modal en caso de error
+        setShowTermsModal(true);
       }
     };
 
@@ -43,7 +44,7 @@ export default function TabLayout() {
   };
 
   return (
-    <>
+    <BleProvider>
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
@@ -81,6 +82,6 @@ export default function TabLayout() {
         />
       </Tabs>
       <TermsModal visible={showTermsModal} onAccept={handleAcceptTerms} />
-    </>
+    </BleProvider>
   );
 }

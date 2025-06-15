@@ -13,7 +13,7 @@ export default function ConnectScreen() {
   const checkEmergencyData = async () => {
     const emergencyContact = await AsyncStorage.getItem('emergencyContact');
     if (!emergencyContact) {
-      Alert.alert('Configuración Pendiente', 'Por favor, configura un número de emergencia en la pantalla de ajustes.');
+      Alert.alert('Configuración Pendiente', 'Por favor, configura un número de WhatsApp de emergencia en la pantalla de ajustes.');
     }
   };
 
@@ -60,10 +60,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   header: {
-    flexDirection: 'row',
+    
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: 25,
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
   },

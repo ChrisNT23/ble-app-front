@@ -1,22 +1,31 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link, router } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
 import TermsModal from '../../components/TermsModal';
-
-// URL de producción
-const API_URL = 'https://ble-app-back.onrender.com/api';
+import { API_URL } from '@/config/constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function RegisterScreen() {
   const [nombre, setNombre] = useState('');
   const [apellido, setApellido] = useState('');
-  const [correo, setCorreo] = useState('');
-  const [pais, setPais] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [phone, setPhone] = useState('+593');
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handlePhoneChange = (text: string) => {
+    // Si el usuario borra el +593, lo volvemos a agregar
+    if (!text.startsWith('+593')) {
+      setPhone('+593' + text.replace('+593', ''));
+    } else {
+      setPhone(text);
+    }
+  };
 
   const handleRegister = async () => {
     if (!acceptTerms) {
@@ -29,40 +38,57 @@ export default function RegisterScreen() {
       return;
     }
 
-    if (!nombre || !apellido || !correo || !pais || !password) {
+    if (!nombre || !apellido || !email || !password || !phone) {
       Alert.alert('Error', 'Por favor completa todos los campos');
       return;
     }
 
-    setIsLoading(true);
+    // Validar que el número tenga al menos 10 dígitos después del +593
+    if (phone.length < 13) {
+      Alert.alert('Error', 'El número de teléfono debe tener al menos 10 dígitos');
+      return;
+    }
+
+    setLoading(true);
 
     try {
+      const userData = {
+        nombre,
+        apellido,
+        correo: email,
+        password,
+        phone
+      };
+
+      console.log('Enviando datos de registro:', userData);
+
       const response = await fetch(`${API_URL}/users/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          nombre,
-          apellido,
-          correo,
-          pais,
-          password
-        }),
+        body: JSON.stringify(userData),
       });
 
       const data = await response.json();
+      console.log('Respuesta del servidor:', data);
 
-      if (response.ok) {
-        Alert.alert('Éxito', 'Registro exitoso. Por favor inicia sesión.');
-        router.replace('/(auth)/login');
+      if (!response.ok) {
+        throw new Error(data.message || 'Error en el registro');
+      }
+
+      if (data.success && data.data && data.data.token) {
+        await AsyncStorage.setItem('token', data.data.token);
+        Alert.alert('Éxito', 'Registro exitoso. Por favor inicie sesión.');
+        router.replace('/login');
       } else {
-        Alert.alert('Error', data.message || 'Error al registrar usuario');
+        throw new Error('No se recibió el token en la respuesta');
       }
     } catch (error) {
-      Alert.alert('Error', 'Error de conexión. Por favor intenta nuevamente.');
+      console.error('Error en registro:', error);
+      Alert.alert('Error', error.message || 'Error en el registro');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
@@ -72,11 +98,9 @@ export default function RegisterScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Crear Cuenta</Text>
-        <Text style={styles.subtitle}>Regístrate para comenzar</Text>
-      </View>
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title}>Crear Cuenta</Text>
+      <Text style={styles.subtitle}>Ingresa tus datos para registrarte</Text>
 
       <View style={styles.form}>
         <View style={styles.inputContainer}>
@@ -86,6 +110,7 @@ export default function RegisterScreen() {
             placeholder="Nombre"
             value={nombre}
             onChangeText={setNombre}
+            autoCapitalize="words"
           />
         </View>
 
@@ -96,6 +121,7 @@ export default function RegisterScreen() {
             placeholder="Apellido"
             value={apellido}
             onChangeText={setApellido}
+            autoCapitalize="words"
           />
         </View>
 
@@ -104,20 +130,21 @@ export default function RegisterScreen() {
           <TextInput
             style={styles.input}
             placeholder="Correo electrónico"
-            value={correo}
-            onChangeText={setCorreo}
+            value={email}
+            onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
           />
         </View>
 
         <View style={styles.inputContainer}>
-          <Ionicons name="globe-outline" size={20} color="#666" style={styles.inputIcon} />
+          <Ionicons name="call-outline" size={20} color="#666" style={styles.inputIcon} />
           <TextInput
             style={styles.input}
-            placeholder="País"
-            value={pais}
-            onChangeText={setPais}
+            placeholder="Número de teléfono"
+            value={phone}
+            onChangeText={handlePhoneChange}
+            keyboardType="phone-pad"
           />
         </View>
 
@@ -128,8 +155,18 @@ export default function RegisterScreen() {
             placeholder="Contraseña"
             value={password}
             onChangeText={setPassword}
-            secureTextEntry
+            secureTextEntry={!showPassword}
           />
+          <TouchableOpacity
+            style={styles.eyeIcon}
+            onPress={() => setShowPassword(!showPassword)}
+          >
+            <Ionicons
+              name={showPassword ? "eye-off-outline" : "eye-outline"}
+              size={20}
+              color="#666"
+            />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.inputContainer}>
@@ -155,13 +192,13 @@ export default function RegisterScreen() {
         <TouchableOpacity 
           style={[
             styles.registerButton, 
-            (!acceptTerms || isLoading) && styles.registerButtonDisabled
+            (!acceptTerms || loading) && styles.registerButtonDisabled
           ]} 
           onPress={handleRegister}
-          disabled={!acceptTerms || isLoading}
+          disabled={!acceptTerms || loading}
         >
           <Text style={styles.registerButtonText}>
-            {isLoading ? 'Registrando...' : 'Registrarse'}
+            {loading ? 'Registrando...' : 'Registrarse'}
           </Text>
         </TouchableOpacity>
 
@@ -185,43 +222,56 @@ export default function RegisterScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  header: {
-    marginTop: 60,
-    marginBottom: 40,
-    paddingHorizontal: 20,
+    flexGrow: 1,
+    backgroundColor: '#f5f5f5',
+    padding: 20,
+    paddingTop: 60,
   },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: 'bold',
+    textAlign: 'center',
     color: '#333',
+    marginBottom: 10,
   },
   subtitle: {
     fontSize: 16,
+    textAlign: 'center',
     color: '#666',
-    marginTop: 8,
+    marginBottom: 30,
   },
   form: {
+    backgroundColor: 'white',
+    borderRadius: 20,
     padding: 20,
-    gap: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#f8f8f8',
+    borderRadius: 10,
+    marginBottom: 15,
     borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 12,
   },
   inputIcon: {
-    marginRight: 8,
+    padding: 15,
   },
   input: {
     flex: 1,
-    height: 50,
+    padding: 15,
     fontSize: 16,
+  },
+  eyeIcon: {
+    padding: 15,
   },
   termsButton: {
     padding: 12,
@@ -238,19 +288,18 @@ const styles = StyleSheet.create({
   },
   registerButton: {
     backgroundColor: '#007AFF',
-    height: 50,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 16,
+    padding: 15,
+    borderRadius: 10,
+    marginTop: 10,
   },
   registerButtonDisabled: {
     backgroundColor: '#ccc',
   },
   registerButtonText: {
-    color: '#fff',
-    fontSize: 16,
+    color: 'white',
+    textAlign: 'center',
     fontWeight: 'bold',
+    fontSize: 16,
   },
   loginContainer: {
     flexDirection: 'row',

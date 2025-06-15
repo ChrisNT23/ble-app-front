@@ -31,6 +31,8 @@ const useSettingsManager = ({ onSettingsSaved }: SettingsManagerProps = {}) => {
 
   const saveSettings = async () => {
     try {
+      // IMPORTANTE: Esta función SOLO guarda la configuración en AsyncStorage
+      // NO envía mensajes de WhatsApp ni realiza ninguna otra acción
       await AsyncStorage.setItem('userName', name);
       await AsyncStorage.setItem('emergencyContact', emergencyContact);
       await AsyncStorage.setItem('emergencyMessage', emergencyMessage);

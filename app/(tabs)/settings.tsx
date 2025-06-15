@@ -1,209 +1,98 @@
-import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { Alert, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
-
+import React, { useState, useEffect } from 'react';
+import { ActivityIndicator, Alert, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { useBle } from '../../context/BleContext';
+import { useSettings } from '../../hooks/useSettings';
+import { usePhoneValidation } from '@/hooks/usePhoneValidation';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-
-// URL de producción
-const API_URL = 'https://ble-app-back.onrender.com/api';
+import Notification from '@/components/Notification';
 
 export default function SettingsScreen() {
-  const [name, setName] = useState('');
-  const [emergencyContact, setEmergencyContact] = useState('');
-  const [emergencyMessage, setEmergencyMessage] = useState('');
-  const [settingsId, setSettingsId] = useState<string | null>(null);
-  const [isEditable, setIsEditable] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const { connectedDevice, disconnectFromDevice } = useBle();
+  const { settings, isLoading, error, saveSettings, loadSettings } = useSettings();
+  const [isEditable, setIsEditable] = useState(!settings._id);
+  const [name, setName] = useState(settings.name);
+  const [emergencyContact, setEmergencyContact] = useState(settings.emergencyContact);
+  const [emergencyMessage, setEmergencyMessage] = useState(settings.emergencyMessage);
+  const [notification, setNotification] = useState<{
+    visible: boolean;
+    type: 'success' | 'error';
+    message: string;
+  }>({
+    visible: false,
+    type: 'success',
+    message: '',
+  });
 
-  // Cargar datos guardados al montar el componente
+  const { validatePhone, error: phoneError } = usePhoneValidation();
+
   useEffect(() => {
-    const loadUserAndSettings = async () => {
+    const loadUserData = async () => {
       try {
-        // Primero cargar el ID del usuario y token desde AsyncStorage
         const userData = await AsyncStorage.getItem('userData');
-        console.log('UserData from AsyncStorage:', userData);
-
-        if (!userData) {
-          Alert.alert('Error', 'No se encontró información del usuario');
-          router.replace('/(auth)/login');
-          return;
+        if (userData) {
+          const parsedData = JSON.parse(userData);
+          setName(parsedData.name || '');
+          setEmergencyContact(parsedData.emergencyContact || '');
+          setEmergencyMessage(parsedData.emergencyMessage || '');
+          setIsEditable(!parsedData.name && !parsedData.emergencyContact && !parsedData.emergencyMessage);
+          await loadSettings();
         }
-
-        const { id, token: userToken } = JSON.parse(userData);
-        console.log('User ID:', id);
-        console.log('User Token:', userToken);
-
-        setUserId(id);
-        setToken(userToken);
-
-        // Configurar el token en axios para todas las peticiones
-        axios.defaults.headers.common['Authorization'] = `Bearer ${userToken}`;
-
-        // Intentar cargar la configuración del usuario desde el backend
-        let attempts = 3;
-        let success = false;
-        let settings = null;
-
-        while (attempts > 0 && !success) {
-          try {
-            console.log('Attempting to fetch settings for user:', id);
-            const response = await axios.get(`${API_URL}/settings/${id}`, { timeout: 5000 });
-            console.log('Settings response:', response.data);
-            settings = response.data;
-            success = true;
-          } catch (error: any) {
-            console.warn(`Attempt ${4 - attempts} failed:`, error.message || 'Unknown error');
-            console.log('Error details:', error.response?.data);
-            
-            // Si es un error 404, significa que es un usuario nuevo
-            if (error.response?.status === 404) {
-              console.log('New user detected, initializing empty settings');
-              settings = {
-                userId: id,
-                name: '',
-                emergencyContact: '',
-                emergencyMessage: '',
-                isNew: true
-              };
-              success = true;
-            } else {
-              attempts--;
-              if (attempts === 0) throw error;
-              await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-          }
-        }
-
-        if (settings) {
-          // Si es un usuario nuevo o no tiene configuración
-          if (settings.isNew || !settings.name) {
-            setName('');
-            setEmergencyContact('');
-            setEmergencyMessage('');
-            setIsEditable(true);
-          } else {
-            // Si tiene configuración existente
-            setName(settings.name || '');
-            setEmergencyContact(settings.emergencyContact || '');
-            setEmergencyMessage(settings.emergencyMessage || '');
-            setSettingsId(settings._id);
-            setIsEditable(false);
-          }
-        } else {
-          // Fallback a AsyncStorage si todo falla
-          console.log('No settings found, loading from AsyncStorage');
-          const savedName = await AsyncStorage.getItem(`userName_${id}`);
-          const savedContact = await AsyncStorage.getItem(`emergencyContact_${id}`);
-          const savedMessage = await AsyncStorage.getItem(`emergencyMessage_${id}`);
-          console.log('Saved data from AsyncStorage:', { savedName, savedContact, savedMessage });
-          if (savedName) setName(savedName);
-          if (savedContact) setEmergencyContact(savedContact);
-          if (savedMessage) setEmergencyMessage(savedMessage);
-          setIsEditable(true);
-        }
-      } catch (error: any) {
-        console.error('Error loading settings:', error.message || error);
-        console.log('Full error object:', error);
-        Alert.alert('Error', 'No se pudieron cargar los datos de configuración');
+      } catch (error) {
+        console.error('Error loading user data:', error);
       }
     };
 
-    loadUserAndSettings();
+    loadUserData();
   }, []);
 
-  // Guardar o actualizar datos
-  const saveSettings = async () => {
-    if (!userId || !token) {
-      Alert.alert('Error', 'No se encontró información del usuario');
-      return;
+  useEffect(() => {
+    if (settings) {
+      setName(settings.name || '');
+      setEmergencyContact(settings.emergencyContact || '');
+      setEmergencyMessage(settings.emergencyMessage || '');
+      setIsEditable(!settings.name && !settings.emergencyContact && !settings.emergencyMessage);
     }
+  }, [settings]);
 
+  // Formatear número de teléfono
+  const formatPhoneNumber = (phone: string) => {
+    const cleaned = phone.replace(/[^\d+]/g, '');
+    if (!cleaned.startsWith('+593')) {
+      return '+593' + cleaned.replace('+593', '');
+    }
+    return cleaned;
+  };
+
+  const handleSave = async () => {
     try {
-      const settings = { 
-        userId,
-        name, 
-        emergencyContact, 
-        emergencyMessage 
-      };
-
-      // Validar y formatear el número de emergencia
-      let formattedContact = emergencyContact.trim();
-      if (formattedContact && !formattedContact.startsWith('+593')) {
-        if (formattedContact.startsWith('0')) {
-          formattedContact = '+593' + formattedContact.slice(1);
-        } else {
-          formattedContact = '+593' + formattedContact;
-        }
-      }
-
-      if (!formattedContact || !emergencyMessage || !name) {
-        Alert.alert('Error', 'Por favor, completa todos los campos.');
+      if (!name.trim() || !emergencyContact.trim() || !emergencyMessage.trim()) {
+        Alert.alert('Error', 'Por favor completa todos los campos');
         return;
       }
 
-      const updatedSettings = { 
-        userId,
-        name, 
-        emergencyContact: formattedContact, 
-        emergencyMessage 
-      };
-
-      let response;
-      if (settingsId) {
-        response = await axios.put(`${API_URL}/settings/${settingsId}`, updatedSettings);
-        console.log('Settings updated:', response.data);
-      } else {
-        response = await axios.post(`${API_URL}/settings`, updatedSettings);
-        const newId = response.data._id;
-        if (newId) {
-          setSettingsId(newId);
-          console.log('Settings created with ID:', newId);
-        }
+      const formattedNumber = formatPhoneNumber(emergencyContact);
+      if (!formattedNumber) {
+        Alert.alert('Error', 'Número de teléfono inválido');
+        return;
       }
 
-      // Guardar en AsyncStorage como respaldo
-      await AsyncStorage.setItem(`userName_${userId}`, name);
-      await AsyncStorage.setItem(`emergencyContact_${userId}`, formattedContact);
-      await AsyncStorage.setItem(`emergencyMessage_${userId}`, emergencyMessage);
+      await saveSettings({
+        name: name.trim(),
+        emergencyContact: formattedNumber,
+        emergencyMessage: emergencyMessage.trim()
+      });
 
-      setIsEditable(false);
       Alert.alert('Éxito', 'Configuración guardada correctamente');
-
-      // Recargar los datos después de guardar
-      await loadSettingsAgain();
     } catch (error: any) {
-      console.error('Error saving settings:', error.message || error);
-      Alert.alert('Error', 'No se pudo guardar la configuración');
+      console.error('Error saving settings:', error);
+      Alert.alert(
+        'Error',
+        error.response?.data?.message || 'Error al guardar la configuración'
+      );
     }
-  };
-
-  // Función para recargar los datos
-  const loadSettingsAgain = async () => {
-    if (!userId) return;
-
-    try {
-      const response = await axios.get(`${API_URL}/settings/${userId}`, { timeout: 5000 });
-      const settings = response.data;
-      if (settings && settings._id) {
-        setName(settings.name || '');
-        setEmergencyContact(settings.emergencyContact || '');
-        setEmergencyMessage(settings.emergencyMessage || '');
-        setSettingsId(settings._id);
-        console.log('Reloaded settings with ID:', settings._id);
-      }
-    } catch (error: any) {
-      console.error('Error reloading settings after save:', error.message || error);
-    }
-  };
-
-  // Habilitar edición
-  const enableEditing = () => {
-    setIsEditable(true);
   };
 
   const handleLogout = async () => {
@@ -220,10 +109,14 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              if (connectedDevice) {
+                await disconnectFromDevice();
+              }
               await AsyncStorage.removeItem('userData');
+              await AsyncStorage.removeItem('settings');
               router.replace('/(auth)/login');
-            } catch (error: any) {
-              console.error('Error al cerrar sesión:', error.message || error);
+            } catch (error) {
+              console.error('Error al cerrar sesión:', error);
               Alert.alert('Error', 'No se pudo cerrar sesión correctamente');
             }
           }
@@ -232,8 +125,28 @@ export default function SettingsScreen() {
     );
   };
 
+  const handlePhoneChange = (text: string) => {
+    const formatted = formatPhoneNumber(text);
+    setEmergencyContact(formatted);
+  };
+
+  if (isLoading) {
+    return (
+      <ThemedView style={styles.container}>
+        <ActivityIndicator size="large" color="#0000ff" />
+      </ThemedView>
+    );
+  }
+
   return (
     <ThemedView style={styles.container}>
+      <Notification
+        visible={notification.visible}
+        type={notification.type}
+        message={notification.message}
+        onClose={() => setNotification(prev => ({ ...prev, visible: false }))}
+      />
+
       {/* Header with Title */}
       <ThemedView style={styles.header}>
         <ThemedText type="title">Información Personal</ThemedText>
@@ -248,55 +161,57 @@ export default function SettingsScreen() {
           value={name}
           onChangeText={setName}
           placeholder="Ingrese su nombre"
-          placeholderTextColor="#888"
           editable={isEditable}
         />
 
         {/* Emergency Contact */}
-        <ThemedText style={styles.label}>Ingrese su contacto de emergencia:</ThemedText>
+        <ThemedText style={styles.label}>Número de WhatsApp de Emergencia:</ThemedText>
         <TextInput
-          style={styles.input}
+          style={[styles.input, phoneError ? styles.inputError : null]}
+          placeholder="Número de emergencia (ej: +593964194669)"
           value={emergencyContact}
-          onChangeText={setEmergencyContact}
-          placeholder="Ingrese un número de celular"
-          placeholderTextColor="#888"
+          onChangeText={handlePhoneChange}
           keyboardType="phone-pad"
           editable={isEditable}
         />
+        {phoneError && (
+          <ThemedText style={styles.errorText}>{phoneError}</ThemedText>
+        )}
 
         {/* Emergency Message */}
-        <ThemedText style={styles.label}>Mensaje de emergencia:</ThemedText>
+        <ThemedText style={styles.label}>Mensaje de WhatsApp de Emergencia:</ThemedText>
         <TextInput
-          style={[styles.input, styles.messageInput]}
+          style={[styles.input, styles.textArea]}
           value={emergencyMessage}
           onChangeText={setEmergencyMessage}
-          placeholder="Ingrese el mensaje a enviar"
-          placeholderTextColor="#888"
+          placeholder="Mensaje que se enviará en caso de emergencia"
           multiline
+          numberOfLines={4}
           editable={isEditable}
         />
 
-        {/* Botones condicionales */}
+        {/* Save Button */}
         {isEditable ? (
-          <TouchableOpacity style={styles.saveButton} onPress={saveSettings}>
-            <MaterialIcons name="save" size={20} color="#FFF" style={styles.saveIcon} />
-            <ThemedText style={styles.saveText}>Guardar información</ThemedText>
+          <TouchableOpacity
+            style={[styles.button, (isLoading || !!phoneError) && styles.buttonDisabled]}
+            onPress={handleSave}
+            disabled={isLoading || !!phoneError}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <ThemedText style={styles.buttonText}>Guardar Configuración</ThemedText>
+            )}
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity style={styles.editButton} onPress={enableEditing}>
-            <MaterialIcons name="edit" size={20} color="#FFF" style={styles.editIcon} />
-            <ThemedText style={styles.editText}>Editar</ThemedText>
+          <TouchableOpacity style={styles.button} onPress={() => setIsEditable(true)}>
+            <ThemedText style={styles.buttonText}>Editar Configuración</ThemedText>
           </TouchableOpacity>
         )}
-      </ThemedView>
 
-      <ThemedView style={styles.section}>
-        <TouchableOpacity 
-          style={styles.logoutButton}
-          onPress={handleLogout}
-        >
-          <MaterialIcons name="logout" size={24} color="#FF3B30" />
-          <ThemedText style={styles.logoutText}>Cerrar Sesión</ThemedText>
+        {/* Logout Button */}
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <ThemedText style={styles.logoutButtonText}>Cerrar Sesión</ThemedText>
         </TouchableOpacity>
       </ThemedView>
     </ThemedView>
@@ -307,6 +222,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  notification: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    right: 20,
+    zIndex: 1000,
   },
   header: {
     padding: 20,
@@ -331,11 +253,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
   },
-  messageInput: {
-    height: 80,
+  inputError: {
+    borderColor: '#FF3B30',
+  },
+  errorText: {
+    color: '#FF3B30',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  buttonDisabled: {
+    backgroundColor: '#A0A0A0',
+  },
+  textArea: {
+    height: 100,
     textAlignVertical: 'top',
   },
-  saveButton: {
+  button: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -344,45 +277,24 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 16,
   },
-  saveIcon: {
-    marginRight: 8,
-  },
-  saveText: {
+  buttonText: {
     color: '#FFF',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  editButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#34C759',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 16,
-  },
-  editIcon: {
-    marginRight: 8,
-  },
-  editText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  section: {
-    marginBottom: 24,
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF3F3',
-    padding: 16,
+    justifyContent: 'center',
+    backgroundColor: '#FF3B30',
+    padding: 12,
     borderRadius: 8,
-    gap: 12,
+    marginTop: 16,
+    marginHorizontal: 16,
   },
-  logoutText: {
-    color: '#FF3B30',
+  logoutButtonText: {
+    color: '#FFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
 });

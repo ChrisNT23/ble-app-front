@@ -1,10 +1,109 @@
-import { Image, TouchableOpacity, StyleSheet, View } from 'react-native';
+import { Image, TouchableOpacity, StyleSheet, View, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Accuracy } from 'expo-location';
+import { getCurrentPositionAsync } from 'expo-location';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { useSettings } from '../../hooks/useSettings';
+
+const API_URL = 'https://ble-app-back.onrender.com/api';
 
 export default function HomeScreen() {
+  const { settings } = useSettings();
+
+  const handleEmergencyMessage = async () => {
+    try {
+      console.log('¡Botón presionado! Enviando mensaje de emergencia...');
+      console.log('Iniciando envío de mensaje de emergencia...');
+      console.log('Configuración actual:', settings);
+
+      if (!settings || !settings.emergencyContact || !settings.emergencyMessage) {
+        Alert.alert('Error', 'Por favor configura tus datos de emergencia en la sección de configuración');
+        return;
+      }
+
+      // Obtener ubicación actual
+      let location;
+      try {
+        location = await getCurrentPositionAsync({
+          accuracy: Accuracy.High,
+          timeInterval: 5000,
+        });
+        console.log('Ubicación obtenida:', location);
+      } catch (locationError) {
+        console.error('Error al obtener ubicación:', locationError);
+        Alert.alert('Error', 'No se pudo obtener la ubicación actual');
+        return;
+      }
+
+      const userData = await AsyncStorage.getItem('userData');
+      if (!userData) {
+        Alert.alert('Error', 'No se encontró información del usuario');
+        return;
+      }
+
+      const { token } = JSON.parse(userData);
+      if (!token) {
+        Alert.alert('Error', 'No se encontró el token de autenticación');
+        return;
+      }
+
+      const messageData = {
+        to: settings.emergencyContact,
+        message: settings.emergencyMessage,
+        location: {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude
+        }
+      };
+
+      console.log('Enviando mensaje con datos:', messageData);
+      console.log('URL del endpoint:', `${API_URL}/whatsapp/send`);
+
+      const response = await fetch(`${API_URL}/whatsapp/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(messageData)
+      });
+
+      // Log de la respuesta completa para debugging
+      console.log('Status de la respuesta:', response.status);
+      console.log('Headers de la respuesta:', response.headers);
+
+      const responseText = await response.text();
+      console.log('Respuesta del servidor (texto):', responseText);
+
+      let responseData;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Error al parsear la respuesta:', parseError);
+        throw new Error('Error en la respuesta del servidor');
+      }
+
+      if (!response.ok) {
+        throw new Error(responseData.message || `Error del servidor: ${response.status}`);
+      }
+
+      if (responseData.success) {
+        Alert.alert('Éxito', 'Mensaje de emergencia enviado correctamente');
+      } else {
+        throw new Error(responseData.message || 'Error al enviar el mensaje');
+      }
+    } catch (error) {
+      console.error('Error al enviar mensaje de emergencia:', error);
+      Alert.alert(
+        'Error',
+        'No se pudo enviar el mensaje de emergencia. Por favor, intenta nuevamente.'
+      );
+    }
+  };
+
   return (
     <ThemedView style={styles.container}>
       {/* Header with Connection Status */}
@@ -24,7 +123,7 @@ export default function HomeScreen() {
       {/* Main Content */}
       <ThemedView style={styles.mainContent}>
         {/* Test Notification Button */}
-        <TouchableOpacity style={styles.testButton}>
+        <TouchableOpacity style={styles.testButton} onPress={handleEmergencyMessage}>
           <MaterialIcons name="notifications" size={40} color="#FFFFFF" />
           <ThemedText style={styles.testButtonText}>Test Notification</ThemedText>
         </TouchableOpacity>
@@ -51,7 +150,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   header: {
-    padding: 16,
+    padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
   },

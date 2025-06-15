@@ -1,47 +1,67 @@
-import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Link, router } from 'expo-router';
+import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, TextInput, TouchableOpacity, View, Text } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Icon from 'react-native-vector-icons/FontAwesome';
 
 // URL de producción
 const API_URL = 'https://ble-app-back.onrender.com/api';
 
-export default function LoginScreen() {
-  const [correo, setCorreo] = useState('');
+const LoginScreen = () => {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
 
   const handleLogin = async () => {
-    if (!correo || !password) {
-      Alert.alert('Error', 'Por favor completa todos los campos');
+    if (!email || !password) {
+      setError('Por favor, complete todos los campos');
       return;
     }
 
     setIsLoading(true);
+    setError('');
 
     try {
       const response = await fetch(`${API_URL}/users/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
-        body: JSON.stringify({ correo, password }),
+        body: JSON.stringify({ correo: email, password }),
       });
 
-      const data = await response.json();
+      // Verificar el tipo de contenido de la respuesta
+      const contentType = response.headers.get('content-type');
+      console.log('Content-Type de la respuesta:', contentType);
 
-      if (response.ok) {
-        // Guardar los datos del usuario en AsyncStorage
-        await AsyncStorage.setItem('userData', JSON.stringify(data.data));
-        // Navegar a la pantalla principal
-        router.replace('/(tabs)');
-      } else {
-        Alert.alert('Error', data.message || 'Credenciales inválidas');
+      // Obtener el texto de la respuesta primero
+      const responseText = await response.text();
+      console.log('Respuesta del servidor:', responseText);
+
+      // Intentar parsear como JSON solo si es JSON válido
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        console.error('Error al parsear la respuesta como JSON:', e);
+        throw new Error('Error en la respuesta del servidor');
       }
-    } catch (error) {
-      console.error('Error de login:', error);
-      Alert.alert('Error', 'Error de conexión. Por favor intenta nuevamente.');
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Error al iniciar sesión');
+      }
+
+      // Guardar datos del usuario
+      await AsyncStorage.setItem('userData', JSON.stringify(data.data));
+
+      // Redirigir al usuario
+      router.replace('/(tabs)');
+    } catch (error: any) {
+      console.error('Error en login:', error);
+      setError(error.message || 'Error al iniciar sesión');
     } finally {
       setIsLoading(false);
     }
@@ -49,123 +69,140 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>¡Bienvenido!</Text>
-        <Text style={styles.subtitle}>Inicia sesión para continuar</Text>
-      </View>
-
       <View style={styles.form}>
+        <View style={styles.header}>
+          <Icon name="user-circle" size={80} color="#A0B3C5" />
+          <Text style={styles.title}>Iniciar Sesión</Text>
+        </View>
+
         <View style={styles.inputContainer}>
-          <Ionicons name="mail-outline" size={20} color="#666" style={styles.inputIcon} />
+          <Icon name="envelope" size={20} color="#666" style={styles.inputIcon} />
           <TextInput
             style={styles.input}
+            value={email}
+            onChangeText={setEmail}
             placeholder="Correo electrónico"
-            value={correo}
-            onChangeText={setCorreo}
             keyboardType="email-address"
             autoCapitalize="none"
           />
         </View>
 
         <View style={styles.inputContainer}>
-          <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.inputIcon} />
+          <Icon name="lock" size={20} color="#666" style={styles.inputIcon} />
           <TextInput
             style={styles.input}
-            placeholder="Contraseña"
             value={password}
             onChangeText={setPassword}
-            secureTextEntry
+            placeholder="Contraseña"
+            secureTextEntry={!showPassword}
           />
+          <TouchableOpacity 
+            style={styles.eyeIcon}
+            onPress={() => setShowPassword(!showPassword)}
+          >
+            <Icon 
+              name={showPassword ? 'eye-slash' : 'eye'} 
+              size={20} 
+              color="#666"
+            />
+          </TouchableOpacity>
         </View>
 
-        <TouchableOpacity 
-          style={[styles.loginButton, isLoading && styles.loginButtonDisabled]} 
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+        <TouchableOpacity
+          style={[styles.button, isLoading && styles.buttonDisabled]}
           onPress={handleLogin}
           disabled={isLoading}
         >
-          <Text style={styles.loginButtonText}>
-            {isLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
-          </Text>
+          {isLoading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.buttonText}>Iniciar Sesión</Text>
+          )}
         </TouchableOpacity>
 
-        <View style={styles.registerContainer}>
-          <Text style={styles.registerText}>¿No tienes una cuenta? </Text>
-          <Link href="/(auth)/register" asChild>
-            <TouchableOpacity>
-              <Text style={styles.registerLink}>Regístrate</Text>
-            </TouchableOpacity>
-          </Link>
-        </View>
+        <TouchableOpacity 
+          style={styles.registerButton}
+          onPress={() => router.push('/(auth)/register')}
+        >
+          <Text style={styles.registerText}>
+            ¿No tienes una cuenta? Regístrate
+          </Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    padding: 20,
-  },
-  header: {
-    marginTop: 60,
-    marginBottom: 40,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: 8,
+    backgroundColor: '#FFFFFF',
   },
   form: {
-    gap: 16,
+    padding: 20,
+    marginTop: 50,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 10,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#ddd',
+    backgroundColor: '#F5F5F5',
     borderRadius: 8,
+    marginBottom: 16,
     paddingHorizontal: 12,
   },
   inputIcon: {
-    marginRight: 8,
+    marginRight: 10,
   },
   input: {
     flex: 1,
     height: 50,
     fontSize: 16,
+    color: '#333',
   },
-  loginButton: {
-    backgroundColor: '#007AFF',
-    height: 50,
+  eyeIcon: {
+    padding: 10,
+  },
+  errorText: {
+    color: '#FF3B30',
+    fontSize: 14,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  button: {
+    backgroundColor: '#A0B3C5',
+    padding: 15,
     borderRadius: 8,
-    justifyContent: 'center',
     alignItems: 'center',
     marginTop: 16,
   },
-  loginButtonDisabled: {
-    backgroundColor: '#ccc',
+  buttonDisabled: {
+    backgroundColor: '#A0A0A0',
   },
-  loginButtonText: {
-    color: '#fff',
+  buttonText: {
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
   },
-  registerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+  registerButton: {
     marginTop: 16,
+    alignItems: 'center',
   },
   registerText: {
-    color: '#666',
+    color: '#A0B3C5',
+    fontSize: 14,
   },
-  registerLink: {
-    color: '#007AFF',
-    fontWeight: 'bold',
-  },
-}); 
+});
+
+export default LoginScreen; 

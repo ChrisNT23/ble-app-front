@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Linking, PermissionsAndroid, Platform, StyleSheet, TouchableOpacity } from 'react-native';
@@ -5,6 +6,7 @@ import { BleManager, Device } from 'react-native-ble-plx';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
+import { API_URL } from '@/config/constants';
 
 // Define the props interface for BleDeviceManager
 interface BleDeviceManagerProps {
@@ -20,6 +22,11 @@ interface BleDeviceManagerProps {
 const SERVICE_UUID = '12345678-1234-1234-1234-1234567890ab';
 const CHARACTERISTIC_UUID = 'abcd1234-5678-90ab-cdef-1234567890ab';
 
+interface Location {
+    latitude: number;
+    longitude: number;
+}
+
 const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
   connectedDevice,
   setConnectedDevice,
@@ -33,7 +40,6 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
   const [isBlinking, setIsBlinking] = useState(false);
   const [hasBleScanPermission, setHasBleScanPermission] = useState(false);
   const [hasBleConnectPermission, setHasBleConnectPermission] = useState(false);
-  const [hasSmsPermission, setHasSmsPermission] = useState(false);
   const [hasLocationPermission, setHasLocationPermission] = useState(false);
   const [isBleManagerReady, setIsBleManagerReady] = useState(false);
   const bleManagerInstance = useRef<BleManager | null>(null);
@@ -45,7 +51,7 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
   const initializationPromise = useRef<Promise<void> | null>(null);
 
   // Variable de simulación: cuando es true, se simula el envío con un Alert; cuando es false, se envía un SMS real
-  const isSimulation = true; // Cambia a false antes de construir la APK para enviar SMS reales
+  const isSimulation = false; // Cambia a false antes de construir la APK para enviar SMS reales
 
   // Inicializar BleManager
   useEffect(() => {
@@ -159,19 +165,16 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
       const bleScanGranted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN);
       const bleConnectGranted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT);
       const locGranted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
-      const smsGranted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.SEND_SMS);
       const backgroundPerm = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE);
 
       setHasBleScanPermission(bleScanGranted);
       setHasBleConnectPermission(bleConnectGranted);
       setHasLocationPermission(locGranted);
-      setHasSmsPermission(smsGranted);
 
       console.log('Permisos verificados:', {
         BLE_SCAN: bleScanGranted,
         BLE_CONNECT: bleConnectGranted,
         LOCATION: locGranted,
-        SMS: smsGranted,
         BACKGROUND: backgroundPerm,
       });
 
@@ -181,7 +184,7 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
         if (!recheck) return false;
       }
 
-      return bleScanGranted && bleConnectGranted && locGranted && (isSimulation || smsGranted) && backgroundPerm;
+      return bleScanGranted && bleConnectGranted && locGranted && backgroundPerm;
     } catch (error) {
       console.error('Error al verificar permisos:', error instanceof Error ? error.message : 'Unknown error');
       return false;
@@ -196,26 +199,22 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        PermissionsAndroid.PERMISSIONS.SEND_SMS,
         PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
       ]);
 
       const hasBleScanPerm = granted['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED;
       const hasBleConnectPerm = granted['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED;
       const hasLocPerm = granted['android.permission.ACCESS_FINE_LOCATION'] === PermissionsAndroid.RESULTS.GRANTED;
-      const hasSmsPerm = granted['android.permission.SEND_SMS'] === PermissionsAndroid.RESULTS.GRANTED;
       const hasBackgroundPerm = granted['android.permission.READ_PHONE_STATE'] === PermissionsAndroid.RESULTS.GRANTED;
 
       setHasBleScanPermission(hasBleScanPerm);
       setHasBleConnectPermission(hasBleConnectPerm);
       setHasLocationPermission(hasLocPerm);
-      setHasSmsPermission(hasSmsPerm);
 
       console.log('Permisos solicitados:', {
         BLE_SCAN: hasBleScanPerm,
         BLE_CONNECT: hasBleConnectPerm,
         LOCATION: hasLocPerm,
-        SMS: hasSmsPerm,
         BACKGROUND: hasBackgroundPerm,
       });
 
@@ -227,13 +226,6 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
         );
         return false;
       }
-      if (!hasSmsPerm && !isSimulation) {
-        Alert.alert(
-          'Permiso de SMS requerido',
-          'La app necesita permiso para enviar SMS. Ve a Ajustes > Aplicaciones > Ble-Connection > Permisos y habilita SMS.',
-          [{ text: 'Ir a Ajustes', onPress: () => Linking.openSettings() }]
-        );
-      }
       if (!hasBackgroundPerm) {
         Alert.alert(
           'Permiso en segundo plano requerido',
@@ -242,7 +234,7 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
         );
       }
 
-      return hasBleScanPerm && hasBleConnectPerm && hasLocPerm && (isSimulation || hasSmsPerm) && hasBackgroundPerm;
+      return hasBleScanPerm && hasBleConnectPerm && hasLocPerm && hasBackgroundPerm;
     } catch (error) {
       console.error('Error al solicitar permisos:', error instanceof Error ? error.message : 'Unknown error');
       onScanError?.(new Error('Error al solicitar permisos: ' + (error instanceof Error ? error.message : 'Unknown error')));
@@ -449,74 +441,101 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
   };
 
   const getLocation = async () => {
-    if (isSimulation) {
-      console.log('Usando ubicación simulada para modo simulación');
-      return Promise.resolve({
-        latitude: 4.7110, // Ejemplo: Bogotá, Colombia
-        longitude: -74.0721,
-      });
-    }
-
-    if (!hasLocationPermission) {
-      return Promise.reject(new Error('Location permission not granted'));
-    }
-
     try {
+      // Verificar y solicitar permisos de ubicación
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        return Promise.reject(new Error('Location permission denied'));
+        throw new Error('Se requieren permisos de ubicación para enviar la ubicación de emergencia');
       }
 
-      const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      return {
+      // Obtener la ubicación con alta precisión
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.BestForNavigation,
+        timeInterval: 1000,
+        distanceInterval: 1
+      });
+
+      console.log('Ubicación obtenida:', {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
+        accuracy: location.coords.accuracy
+      });
+
+      return {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude
       };
     } catch (error) {
-      if (error instanceof Error) {
-        return Promise.reject(error);
-      }
-      return Promise.reject(new Error('Unknown error'));
+      console.error('Error al obtener ubicación:', error);
+      throw new Error('No se pudo obtener la ubicación actual. Por favor, verifica que la ubicación esté activada.');
     }
   };
 
   const sendEmergencyMessage = async () => {
-    if (Platform.OS === 'web') {
-      onScanError?.(new Error('BLE is not supported on web'));
-      return;
-    }
-
     try {
-      const manager = bleManagerInstance.current;
-      if (!manager) {
-        throw new Error('BleManager no está disponible');
+      console.log('Iniciando envío de mensaje de emergencia...');
+      
+      // Obtener la configuración actual
+      const settings = await AsyncStorage.getItem('settings');
+      console.log('Configuración actual:', settings);
+      
+      if (!settings) {
+        throw new Error('No se encontró la configuración de emergencia. Por favor, configure los datos de emergencia en la sección de configuración.');
       }
 
-      if (!hasSmsPermission) {
-        console.log('Solicitando permiso de SMS...');
-        const permissionStatus = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.SEND_SMS
-        );
-        setHasSmsPermission(permissionStatus === PermissionsAndroid.RESULTS.GRANTED);
-        
-        if (permissionStatus !== PermissionsAndroid.RESULTS.GRANTED) {
-          throw new Error('Permiso de SMS no otorgado');
-        }
+      const { emergencyContact, emergencyMessage } = JSON.parse(settings);
+      
+      if (!emergencyContact) {
+        throw new Error('No se encontró el número de emergencia. Por favor, configure un número de emergencia en la sección de configuración.');
       }
 
-      // Simular envío de SMS (reemplazar con implementación real)
+      // Obtener la ubicación actual
+      const location = await getLocation();
+      console.log('Ubicación obtenida:', location);
+
+      // Construir el mensaje con la ubicación
+      const messageWithLocation = `${emergencyMessage || '¡EMERGENCIA!'}\n\nMi ubicación actual:\nhttps://www.google.com/maps?q=${location.latitude},${location.longitude}`;
+
+      // Enviar el mensaje
+      const response = await fetch(`${API_URL}/whatsapp/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await AsyncStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          to: emergencyContact,
+          message: messageWithLocation,
+          location: {
+            latitude: location.latitude,
+            longitude: location.longitude
+          }
+        })
+      });
+
+      const data = await response.json();
+      console.log('Respuesta del servidor:', data);
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Error al enviar el mensaje');
+      }
+
       Alert.alert(
-        'Mensaje de Emergencia',
-        'Se ha enviado un mensaje de emergencia a tu contacto.',
+        'Mensaje Enviado',
+        'El mensaje de emergencia ha sido enviado correctamente.',
         [{ text: 'OK' }]
       );
+    } catch (error: unknown) {
+      console.error('Error al enviar mensaje de emergencia:', error);
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Error al enviar el mensaje de emergencia. Por favor, verifica tu configuración.';
       
-      onButtonPress?.();
-    } catch (error) {
-      console.error('Error al enviar mensaje:', error);
-      if (isMounted.current) {
-        onScanError?.(new Error('Error al enviar mensaje: ' + (error instanceof Error ? error.message : 'Unknown error')));
-      }
+      Alert.alert(
+        'Error',
+        errorMessage,
+        [{ text: 'OK' }]
+      );
     }
   };
 
@@ -540,42 +559,15 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
         throw new Error('El dispositivo no está conectado');
       }
 
+      // IMPORTANTE: Esta función SOLO envía mensajes cuando se recibe el valor "1" del dispositivo
+      // No se debe enviar mensajes en ningún otro caso
+      console.log('Monitoreando botón para valor "1"...');
+
       // Suscribirse a las notificaciones
       await device.monitorCharacteristicForService(
         SERVICE_UUID,
         CHARACTERISTIC_UUID,
-        (error, characteristic) => {
-          if (error) {
-            console.log('Notificación recibida:', error.message);
-            // Si es un error de desconexión, manejarlo de forma más elegante
-            if (error.message.includes('disconnected')) {
-              console.log('Dispositivo desconectado');
-              if (isMounted.current) {
-                setConnectedDevice(null);
-                Alert.alert(
-                  'Dispositivo Desconectado',
-                  'La conexión con el dispositivo se ha perdido.',
-                  [{ text: 'OK' }]
-                );
-                startScan();
-              }
-            } else {
-              console.error('Error en notificación:', error);
-            }
-            return;
-          }
-
-          if (characteristic?.value) {
-            // Decodificar el valor base64 sin usar Buffer
-            const value = atob(characteristic.value);
-            console.log('Valor recibido:', value);
-            
-            if (value === '1') {
-              console.log('¡Botón presionado! Enviando mensaje de emergencia...');
-              sendEmergencyMessage();
-            }
-          }
-        }
+        handleCharacteristicValueChange
       );
 
       console.log('Monitoreo de botón iniciado correctamente');
@@ -587,6 +579,42 @@ const BleDeviceManager: React.FC<BleDeviceManagerProps> = ({
         setConnectedDevice(null);
         startScan();
       }
+    }
+  };
+
+  const decodeBase64 = (base64: string): string => {
+    try {
+        // En React Native, usamos atob para decodificar base64
+        return atob(base64);
+    } catch (error) {
+        console.error('Error al decodificar base64:', error);
+        return '';
+    }
+  };
+
+  const handleCharacteristicValueChange = (error: Error | null, characteristic: any) => {
+    if (error) {
+        console.error('Error en la característica:', error);
+        return;
+    }
+
+    if (characteristic?.value) {
+        const value = decodeBase64(characteristic.value);
+        console.log('Valor recibido:', value);
+        
+        if (value === '1') {
+            console.log('¡Botón presionado! Enviando mensaje de emergencia...');
+            // Usar una función async inmediatamente invocada
+            (async () => {
+                try {
+                    await sendEmergencyMessage();
+                } catch (error) {
+                    console.error('Error al procesar la emergencia:', error);
+                }
+            })();
+        } else {
+            console.log('Valor recibido diferente de "1", no se envía mensaje');
+        }
     }
   };
 
