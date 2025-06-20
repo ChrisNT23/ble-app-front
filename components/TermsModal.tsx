@@ -1,6 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, Dimensions } from 'react-native';
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 interface TermsModalProps {
   visible: boolean;
@@ -32,17 +34,21 @@ const TermsModal: React.FC<TermsModalProps> = ({ visible, onAccept, onClose }) =
             <MaterialIcons name="close" size={24} color="#333" />
           </TouchableOpacity>
           <Text style={styles.title}>Términos y Condiciones</Text>
-          <ScrollView style={styles.termsContainer}>
+          <ScrollView 
+            style={styles.termsContainer}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.termsContent}
+          >
             <Text style={styles.termsText}>
-              Bienvenido a EmergencyApp. Al usar esta aplicación, aceptas los siguientes términos y condiciones:
+              Bienvenido a VERSION BETA. Al usar esta aplicación, aceptas los siguientes términos y condiciones:
             </Text>
             <Text style={styles.termsText}>
               1. Uso de la aplicación{'\n'}
-              Esta app está diseñada para enviar mensajes de emergencia a un contacto predefinido usando Bluetooth y SMS. No garantizamos que el mensaje siempre se envíe debido a factores externos (conexión, permisos, etc.).
+              Esta app está diseñada para enviar mensajes de emergencia a un contacto predefinido usando Bluetooth y WhatsApp. No garantizamos que el mensaje siempre se envíe debido a factores externos (conexión, permisos, etc.).
             </Text>
             <Text style={styles.termsText}>
               2. Permisos{'\n'}
-              La app requiere permisos de Bluetooth, SMS y ubicación para funcionar correctamente. Estos datos se usarán únicamente para enviar mensajes de emergencia.
+              La app requiere permisos de Bluetooth y ubicación para funcionar correctamente. Estos datos se usarán únicamente para enviar mensajes de emergencia.
             </Text>
             <Text style={styles.termsText}>
               3. Privacidad{'\n'}
@@ -61,25 +67,27 @@ const TermsModal: React.FC<TermsModalProps> = ({ visible, onAccept, onClose }) =
             </Text>
           </ScrollView>
 
-          <TouchableOpacity
-            style={styles.checkboxContainer}
-            onPress={() => setIsChecked(!isChecked)}
-          >
-            <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-              {isChecked && (
-                <MaterialIcons name="check" size={16} color="#FFFFFF" />
-              )}
-            </View>
-            <Text style={styles.checkboxLabel}>Acepto los términos y condiciones</Text>
-          </TouchableOpacity>
+          <View style={styles.bottomSection}>
+            <TouchableOpacity
+              style={styles.checkboxContainer}
+              onPress={() => setIsChecked(!isChecked)}
+            >
+              <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
+                {isChecked && (
+                  <MaterialIcons name="check" size={16} color="#FFFFFF" />
+                )}
+              </View>
+              <Text style={styles.checkboxLabel}>Acepto los términos y condiciones</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.acceptButton, !isChecked && styles.disabledButton]}
-            onPress={handleAccept}
-            disabled={!isChecked}
-          >
-            <Text style={styles.acceptButtonText}>Aceptar</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.acceptButton, !isChecked && styles.disabledButton]}
+              onPress={handleAccept}
+              disabled={!isChecked}
+            >
+              <Text style={styles.acceptButtonText}>Aceptar</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
@@ -92,43 +100,54 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: Math.max(10, screenWidth * 0.025),
   },
   modalContainer: {
-    width: '90%',
-    maxHeight: '80%',
+    width: '100%',
+    maxWidth: Math.min(500, screenWidth * 0.95),
+    maxHeight: Math.min(600, screenHeight * 0.85),
     backgroundColor: '#FFFFFF',
     borderRadius: 10,
-    padding: 20,
+    padding: Math.max(15, screenWidth * 0.04),
     elevation: 5,
   },
   title: {
-    fontSize: 20,
+    fontSize: Math.max(18, screenWidth * 0.045),
     fontWeight: 'bold',
-    marginBottom: 15,
+    marginBottom: Math.max(10, screenHeight * 0.015),
     textAlign: 'center',
     color: '#333',
   },
   termsContainer: {
-    flexGrow: 0,
-    marginBottom: 15,
+    maxHeight: Math.min(300, screenHeight * 0.4),
+    marginBottom: Math.max(10, screenHeight * 0.015),
+  },
+  termsContent: {
+    paddingBottom: Math.max(5, screenHeight * 0.01),
   },
   termsText: {
-    fontSize: 14,
+    fontSize: Math.max(14, screenWidth * 0.035),
     color: '#666',
-    lineHeight: 20,
-    marginBottom: 15,
+    lineHeight: Math.max(22, screenWidth * 0.055),
+    marginBottom: Math.max(15, screenHeight * 0.02),
+  },
+  bottomSection: {
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+    paddingTop: Math.max(10, screenHeight * 0.015),
+    backgroundColor: '#FFFFFF',
   },
   checkboxContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: Math.max(15, screenHeight * 0.02),
   },
   checkbox: {
-    width: 20,
-    height: 20,
+    width: Math.max(18, screenWidth * 0.045),
+    height: Math.max(18, screenWidth * 0.045),
     borderWidth: 2,
     borderColor: '#333',
-    marginRight: 10,
+    marginRight: Math.max(8, screenWidth * 0.02),
     borderRadius: 4,
     backgroundColor: 'white',
     justifyContent: 'center',
@@ -139,29 +158,31 @@ const styles = StyleSheet.create({
     borderColor: '#34C759',
   },
   checkboxLabel: {
-    fontSize: 14,
+    fontSize: Math.max(12, screenWidth * 0.03),
     color: '#333',
+    flex: 1,
   },
   acceptButton: {
     backgroundColor: '#34C759',
-    paddingVertical: 12,
+    paddingVertical: Math.max(10, screenHeight * 0.015),
     borderRadius: 8,
     alignItems: 'center',
+    minHeight: Math.max(40, screenHeight * 0.05),
   },
   disabledButton: {
     backgroundColor: '#A0A0A0',
   },
   acceptButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: Math.max(14, screenWidth * 0.035),
     fontWeight: 'bold',
   },
   closeButton: {
     position: 'absolute',
-    top: 10,
-    right: 10,
+    top: Math.max(8, screenHeight * 0.01),
+    right: Math.max(8, screenWidth * 0.02),
     zIndex: 1,
-    padding: 5,
+    padding: Math.max(4, screenWidth * 0.01),
   },
 });
 

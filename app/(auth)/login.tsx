@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, StyleSheet, TextInput, TouchableOpacity, View, Text } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/FontAwesome';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
 // URL de producción
 const API_URL = 'https://ble-app-back.onrender.com/api';
@@ -13,6 +14,22 @@ const LoginScreen = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
+  // Colores adaptativos para modo claro/oscuro
+  const colors = {
+    background: isDark ? '#1C1C1E' : '#FFFFFF',
+    cardBackground: isDark ? '#2C2C2E' : '#FFFFFF',
+    text: isDark ? '#FFFFFF' : '#333333',
+    textSecondary: isDark ? '#8E8E93' : '#666666',
+    placeholder: isDark ? '#C7C7CC' : '#999999',
+    inputBackground: isDark ? '#3A3A3C' : '#F5F5F5',
+    inputBorder: isDark ? '#48484A' : '#E9ECEF',
+    error: '#FF3B30',
+    success: '#34C759',
+  };
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -68,32 +85,34 @@ const LoginScreen = () => {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.form}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.form, { backgroundColor: colors.cardBackground }]}>
         <View style={styles.header}>
           <Icon name="user-circle" size={80} color="#A0B3C5" />
-          <Text style={styles.title}>Iniciar Sesión</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Iniciar Sesión</Text>
         </View>
 
-        <View style={styles.inputContainer}>
-          <Icon name="envelope" size={20} color="#666" style={styles.inputIcon} />
+        <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground }]}>
+          <Icon name="envelope" size={20} color={colors.textSecondary} style={styles.inputIcon} />
           <TextInput
-            style={styles.input}
+            style={[styles.input, { color: colors.text }]}
             value={email}
             onChangeText={setEmail}
             placeholder="Correo electrónico"
+            placeholderTextColor={colors.placeholder}
             keyboardType="email-address"
             autoCapitalize="none"
           />
         </View>
 
-        <View style={styles.inputContainer}>
-          <Icon name="lock" size={20} color="#666" style={styles.inputIcon} />
+        <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground }]}>
+          <Icon name="lock" size={20} color={colors.textSecondary} style={styles.inputIcon} />
           <TextInput
-            style={styles.input}
+            style={[styles.input, { color: colors.text }]}
             value={password}
             onChangeText={setPassword}
             placeholder="Contraseña"
+            placeholderTextColor={colors.placeholder}
             secureTextEntry={!showPassword}
           />
           <TouchableOpacity 
@@ -103,12 +122,12 @@ const LoginScreen = () => {
             <Icon 
               name={showPassword ? 'eye-slash' : 'eye'} 
               size={20} 
-              color="#666"
+              color={colors.textSecondary}
             />
           </TouchableOpacity>
         </View>
 
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        {error ? <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text> : null}
 
         <TouchableOpacity
           style={[styles.button, isLoading && styles.buttonDisabled]}
@@ -126,7 +145,7 @@ const LoginScreen = () => {
           style={styles.registerButton}
           onPress={() => router.push('/(auth)/register')}
         >
-          <Text style={styles.registerText}>
+          <Text style={[styles.registerText, { color: colors.textSecondary }]}>
             ¿No tienes una cuenta? Regístrate
           </Text>
         </TouchableOpacity>
@@ -138,11 +157,12 @@ const LoginScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   form: {
     padding: 20,
     marginTop: 50,
+    margin: 20,
+    borderRadius: 12,
   },
   header: {
     alignItems: 'center',
@@ -151,16 +171,16 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
     marginTop: 10,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
     borderRadius: 8,
     marginBottom: 16,
     paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   inputIcon: {
     marginRight: 10,
@@ -169,13 +189,11 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 50,
     fontSize: 16,
-    color: '#333',
   },
   eyeIcon: {
     padding: 10,
   },
   errorText: {
-    color: '#FF3B30',
     fontSize: 14,
     marginBottom: 16,
     textAlign: 'center',
@@ -200,7 +218,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   registerText: {
-    color: '#A0B3C5',
     fontSize: 14,
   },
 });

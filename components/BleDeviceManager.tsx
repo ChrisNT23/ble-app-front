@@ -751,7 +751,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   refreshButton: {
-    backgroundColor: '#34C759',
+    backgroundColor: '#A0B3C5',
     flexDirection: 'row',
     paddingVertical: 10,
     paddingHorizontal: 20,

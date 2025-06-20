@@ -112,10 +112,10 @@ export default function HomeScreen() {
         <ThemedView style={styles.connectionStatus}>
           <ThemedView style={styles.statusContainer}>
             <MaterialIcons name="bluetooth-disabled" size={20} color="#FF0000" />
-            <ThemedText style={styles.statusText}>Disconnected</ThemedText>
+            <ThemedText style={styles.statusText}>Desconectado</ThemedText>
           </ThemedView>
           <TouchableOpacity style={styles.reconnectButton}>
-            <ThemedText style={styles.reconnectText}>Reconnect</ThemedText>
+            <ThemedText style={styles.reconnectText}>Reconectar</ThemedText>
           </TouchableOpacity>
         </ThemedView>
       </ThemedView>
@@ -125,18 +125,18 @@ export default function HomeScreen() {
         {/* Test Notification Button */}
         <TouchableOpacity style={styles.testButton} onPress={handleEmergencyMessage}>
           <MaterialIcons name="notifications" size={40} color="#FFFFFF" />
-          <ThemedText style={styles.testButtonText}>Test Notification</ThemedText>
+          <ThemedText style={styles.testButtonText}>Prueba de notificación</ThemedText>
         </TouchableOpacity>
 
         {/* Instruction Text */}
         <ThemedText style={styles.instructionText}>
-          Press to test the emergency notification system
+          Presiona el botón para probar el sistema de notificación de emergencia
         </ThemedText>
 
         {/* BLE Connection Message */}
         <ThemedView style={styles.bleMessage}>
           <ThemedText style={styles.bleText}>
-            Connect to a BLE device to enable emergency alerts
+            Conecta un dispositivo BLE para habilitar alertas de emergencia
           </ThemedText>
         </ThemedView>
       </ThemedView>

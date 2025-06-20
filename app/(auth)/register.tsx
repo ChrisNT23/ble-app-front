@@ -5,6 +5,7 @@ import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
 import TermsModal from '../../components/TermsModal';
 import { API_URL } from '@/config/constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
 export default function RegisterScreen() {
   const [nombre, setNombre] = useState('');
@@ -17,6 +18,22 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const [phone, setPhone] = useState('+593');
   const [showPassword, setShowPassword] = useState(false);
+
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
+  // Colores adaptativos para modo claro/oscuro
+  const colors = {
+    background: isDark ? '#1C1C1E' : '#f5f5f5',
+    cardBackground: isDark ? '#2C2C2E' : '#FFFFFF',
+    text: isDark ? '#FFFFFF' : '#333333',
+    textSecondary: isDark ? '#8E8E93' : '#666666',
+    placeholder: isDark ? '#C7C7CC' : '#999999',
+    inputBackground: isDark ? '#3A3A3C' : '#f8f8f8',
+    inputBorder: isDark ? '#48484A' : '#ddd',
+    error: '#FF3B30',
+    success: '#34C759',
+  };
 
   const handlePhoneChange = (text: string) => {
     // Si el usuario borra el +593, lo volvemos a agregar
@@ -84,7 +101,7 @@ export default function RegisterScreen() {
       } else {
         throw new Error('No se recibió el token en la respuesta');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error en registro:', error);
       Alert.alert('Error', error.message || 'Error en el registro');
     } finally {
@@ -98,38 +115,41 @@ export default function RegisterScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Crear Cuenta</Text>
-      <Text style={styles.subtitle}>Ingresa tus datos para registrarte</Text>
+    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}>
+      <Text style={[styles.title, { color: colors.text }]}>Crear Cuenta</Text>
+      <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Ingresa tus datos para registrarte</Text>
 
-      <View style={styles.form}>
-        <View style={styles.inputContainer}>
-          <Ionicons name="person-outline" size={20} color="#666" style={styles.inputIcon} />
+      <View style={[styles.form, { backgroundColor: colors.cardBackground }]}>
+        <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder }]}>
+          <Ionicons name="person-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
           <TextInput
-            style={styles.input}
+            style={[styles.input, { color: colors.text }]}
             placeholder="Nombre"
+            placeholderTextColor={colors.placeholder}
             value={nombre}
             onChangeText={setNombre}
             autoCapitalize="words"
           />
         </View>
 
-        <View style={styles.inputContainer}>
-          <Ionicons name="person-outline" size={20} color="#666" style={styles.inputIcon} />
+        <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder }]}>
+          <Ionicons name="person-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
           <TextInput
-            style={styles.input}
+            style={[styles.input, { color: colors.text }]}
             placeholder="Apellido"
+            placeholderTextColor={colors.placeholder}
             value={apellido}
             onChangeText={setApellido}
             autoCapitalize="words"
           />
         </View>
 
-        <View style={styles.inputContainer}>
-          <Ionicons name="mail-outline" size={20} color="#666" style={styles.inputIcon} />
+        <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder }]}>
+          <Ionicons name="mail-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
           <TextInput
-            style={styles.input}
+            style={[styles.input, { color: colors.text }]}
             placeholder="Correo electrónico"
+            placeholderTextColor={colors.placeholder}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -137,22 +157,24 @@ export default function RegisterScreen() {
           />
         </View>
 
-        <View style={styles.inputContainer}>
-          <Ionicons name="call-outline" size={20} color="#666" style={styles.inputIcon} />
+        <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder }]}>
+          <Ionicons name="call-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
           <TextInput
-            style={styles.input}
+            style={[styles.input, { color: colors.text }]}
             placeholder="Número de teléfono"
+            placeholderTextColor={colors.placeholder}
             value={phone}
             onChangeText={handlePhoneChange}
             keyboardType="phone-pad"
           />
         </View>
 
-        <View style={styles.inputContainer}>
-          <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.inputIcon} />
+        <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder }]}>
+          <Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
           <TextInput
-            style={styles.input}
+            style={[styles.input, { color: colors.text }]}
             placeholder="Contraseña"
+            placeholderTextColor={colors.placeholder}
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!showPassword}
@@ -164,16 +186,17 @@ export default function RegisterScreen() {
             <Ionicons
               name={showPassword ? "eye-off-outline" : "eye-outline"}
               size={20}
-              color="#666"
+              color={colors.textSecondary}
             />
           </TouchableOpacity>
         </View>
 
-        <View style={styles.inputContainer}>
-          <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.inputIcon} />
+        <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder }]}>
+          <Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
           <TextInput
-            style={styles.input}
+            style={[styles.input, { color: colors.text }]}
             placeholder="Confirmar Contraseña"
+            placeholderTextColor={colors.placeholder}
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             secureTextEntry
@@ -203,7 +226,7 @@ export default function RegisterScreen() {
         </TouchableOpacity>
 
         <View style={styles.loginContainer}>
-          <Text style={styles.loginText}>¿Ya tienes una cuenta? </Text>
+          <Text style={[styles.loginText, { color: colors.textSecondary }]}>¿Ya tienes una cuenta? </Text>
           <Link href="/(auth)/login" asChild>
             <TouchableOpacity>
               <Text style={styles.loginLink}>Iniciar Sesión</Text>
@@ -215,6 +238,7 @@ export default function RegisterScreen() {
       <TermsModal
         visible={showTermsModal}
         onAccept={handleAcceptTerms}
+        onClose={() => setShowTermsModal(false)}
       />
     </ScrollView>
   );
@@ -223,7 +247,6 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: '#f5f5f5',
     padding: 20,
     paddingTop: 60,
   },
@@ -231,36 +254,23 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     textAlign: 'center',
-    color: '#333',
     marginBottom: 10,
   },
   subtitle: {
     fontSize: 16,
     textAlign: 'center',
-    color: '#666',
     marginBottom: 30,
   },
   form: {
-    backgroundColor: 'white',
     borderRadius: 20,
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f8f8',
     borderRadius: 10,
     marginBottom: 15,
     borderWidth: 1,
-    borderColor: '#ddd',
   },
   inputIcon: {
     padding: 15,
@@ -307,7 +317,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   loginText: {
-    color: '#666',
   },
   loginLink: {
     color: '#007AFF',

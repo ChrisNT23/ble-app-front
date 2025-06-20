@@ -81,7 +81,11 @@ export default function TabLayout() {
           }}
         />
       </Tabs>
-      <TermsModal visible={showTermsModal} onAccept={handleAcceptTerms} />
+      <TermsModal 
+        visible={showTermsModal} 
+        onAccept={handleAcceptTerms} 
+        onClose={() => setShowTermsModal(false)}
+      />
     </BleProvider>
   );
 }

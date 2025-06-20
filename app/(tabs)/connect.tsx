@@ -5,9 +5,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { Alert, StyleSheet } from 'react-native';
 import { Device } from 'react-native-ble-plx';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
 export default function ConnectScreen() {
   const [connectedDevice, setConnectedDevice] = useState<Device | null>(null);
+
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
+  // Colores adaptativos para modo claro/oscuro
+  const colors = {
+    background: isDark ? '#1C1C1E' : '#FFFFFF',
+    border: isDark ? '#38383A' : '#E0E0E0',
+  };
 
   // Verifica si los datos ya existen, no los sobrescribe
   const checkEmergencyData = async () => {
@@ -37,8 +47,8 @@ export default function ConnectScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <ThemedView style={styles.header}>
+    <ThemedView style={[styles.container, { backgroundColor: colors.background }]}>
+      <ThemedView style={[styles.header, { borderBottomColor: colors.border }]}>
         <ThemedText type="title">Búsqueda de dispositivos</ThemedText>       
       </ThemedView>
       <ThemedView style={styles.section}>
@@ -57,15 +67,12 @@ export default function ConnectScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   header: {
-    
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 25,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
   },
   section: {
     padding: 20,
